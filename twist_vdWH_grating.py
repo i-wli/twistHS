@@ -5,37 +5,27 @@ import ase.io
 from ase.atoms import Atoms
 from ase.build import make_supercell
 
-"""This is a version where to input superperiodicity and output twist angle"""
+"""This is a version to search from twist angle applied to vdWH by optical analogue approximation."""
 
-"""please check PHYSICAL REVIEW B 90, 155451 (2014) for theoretical background.
-supercell 1 with (N,M) and (−M,N + M) vectors, followed by the twist rotation with +θ/2. 
-supercell 2 with (M,N) and (−N,M + N) vectors, followed by the rotation with −θ/2
-The commensurate tBLG with the twist angle θ and the periodicity Lcell is obtained"""
+"""please check New Journal of Physics 16 (2014) 083028 for theoretical background"""
 
 class Pyatoms():
     def __init__(self,vectors, positions, atomic_numbers):
         self.vectors = vectors
         self.positions = positions
         self.atomic_numbers = atomic_numbers
+
 class theta():
     def __init__(self, radian, degree):
         self.radian = radian
         self.degree = degree
 
-def calc_vectors_angle(v1, v2):
+def calc_vectors_dis(v1):
     """calculate the angle between two vectors"""
-    v1dotv2 = np.dot(v1, v2)
     length_v1 = np.sqrt(np.dot(v1, v1))
-    length_v2 = np.sqrt(np.dot(v2, v2))
-    cos_theta = v1dotv2 / (length_v1 * length_v2)
-    # In the case cos(theta) little larger than 1.0
-    if float_eq(cos_theta, 1.0):
-      cos_theta = 1.0
-    angle = np.arccos(cos_theta)
-    degree = angle * 180 /np.pi
-    return theta(angle, degree)
+    return abs(length_v1)
 
-FLOAT_PREC = 1e-4
+FLOAT_PREC = 1e-6
 def float_eq(f1, f2, prec=FLOAT_PREC):
     """float equal"""
     return abs(f1 - f2) < prec
@@ -44,8 +34,6 @@ def exit(contect='[error] Unknown: Something goes wrong...'):
     """exit the program with some error msg."""
     print(contect)
     sys.exit(1)    
-
-
     
 def ase_atoms_to_py_atoms(atoms: ase.atoms.Atoms) -> Pyatoms:
     vectors = np.array(atoms.cell.copy())
@@ -63,19 +51,14 @@ def py_atoms_to_ase_atoms(atoms: Pyatoms) -> ase.atoms.Atoms:
     )
     return atoms    
     
-
 def check_vectors(atoms: ase.atoms.Atoms):
-    vectors = atoms.cell
-    len_ang = atoms.get_cell_lengths_and_angles()
-    if not (float_eq(vectors[0][2], 0.0) and
-            float_eq(vectors[1][2], 0.0) and
-            float_eq(vectors[2][0], 0.0) and
-            float_eq(vectors[2][1], 0.0)):
+    len_ang = atoms.cell.cellpar()
+    if not (float_eq(len_ang[3], 90.0) and
+            float_eq(len_ang[4], 90.0)):
         exit('[error] Input structures: c axis must be in z direction')
     if not (float_eq(len_ang[0], len_ang[1]) and
-            float_eq(len_ang[5], 60)):
-        exit('[error] This version is only for P6 (a=b & γ=60)')
-
+            float_eq(len_ang[5], 120)):
+        exit('[error] This version is only for P6 (a=b & γ=120)')
 
 def coord_cart2frac(cell_vecs, cart_vec):
     """Transfrom the cart coords to frac coords"""
@@ -151,39 +134,60 @@ def get_supercell_atoms_pos(supercell_vecs: "np.array",
         superatoms.extend(shifted_atoms)
     return superatoms
 
+def coincidence(vectors_super, vectors_indiv,
+                trans_2D: "np.array",
+                unit: ase.atoms.Atoms)-> Pyatoms:
+    superatoms = get_supercell_atoms_pos(vectors_indiv, trans_2D, unit)
+    superatoms_frac = coord_cart2frac(vectors_indiv, superatoms.positions)
+    superatoms_pos = coord_frac2cart(vectors_super, superatoms_frac)
+    return Pyatoms(vectors_super, superatoms_pos, superatoms.numbers)
+
 def gen_supercell(bottom: ase.atoms.Atoms,
                   top: ase.atoms.Atoms,
-                  tran_2D_b, tran_2D_t, 
+                  theta: float, 
                   super_z: float,
                   delta_z: float) -> ase.atoms.Atoms :
+    """get transition matrix"""
+    lc_ratio = bottom.cell.cellpar()[0]/top.cell.cellpar()[0]
+    theta_rad = theta/180*np.pi
+    deno = np.sqrt(1 + np.square(lc_ratio) - 2 * lc_ratio * np.cos(theta_rad))
+    phi_moire = np.arccos((lc_ratio * np.cos(theta_rad) -1)/deno)
+    m = 1/np.sqrt(3) /deno * np.sin(phi_moire) + 1/deno * np.cos(phi_moire)
+    n = 2/np.sqrt(3) /deno * np.sin(phi_moire)
+    r = 1/np.sqrt(3) /deno * lc_ratio * np.sin(phi_moire-theta_rad) + 1/deno * lc_ratio * np.cos(phi_moire-theta_rad)
+    s = 2/np.sqrt(3) /deno * lc_ratio * np.sin(phi_moire-theta_rad)
+    para_matrx = np.array([m,n,r,s])
+    para_matrx = np.around(para_matrx)
+    tran_2D_b = np.array([[-para_matrx[0], -para_matrx[1]],[para_matrx[1], para_matrx[1]-para_matrx[0]]]) #to keep lattice_x positive
+    tran_2D_t = np.array([[-para_matrx[2], -para_matrx[3]],[para_matrx[3], para_matrx[3]-para_matrx[2]]])
     """get supercell lattice"""
     vectors_b = get_supercell_vecs(tran_2D_b, bottom.cell, super_z)
-    vectors_t = get_supercell_vecs(tran_2D_t, bottom.cell, super_z)
+    top_rot = top.copy()
+    top_rot.rotate(theta, 'z', rotate_cell=True)
+    vectors_t = get_supercell_vecs(tran_2D_t, top_rot.cell, super_z)
+    vectors = (vectors_b + vectors_t)/2
+    Delta = calc_vectors_dis(vectors_t[0,:2] - vectors_b[0,:2])/calc_vectors_dis(vectors[0,:2])
+    #mismatch = (calc_vectors_dis(vectors_t[0,:2]) - calc_vectors_dis(vectors_b[0,:2]))/calc_vectors_dis(vectors[0,:2])
     """get atom position"""
-    bottom_super = get_supercell_atoms_pos(vectors_b, tran_2D_b, bottom)
-    bottom_super_pos = bottom_super.positions
-    top_super = get_supercell_atoms_pos(vectors_t, tran_2D_t, top)
-    top_super_frac = coord_cart2frac(vectors_t, top_super.positions)
-    top_super_pos = coord_frac2cart(vectors_b, top_super_frac)
-    #top_super_pos = np.dot(tran_2D_b,np.dot(np.linalg.inv(tran_2D_t), top_super.positions))
-    top_super_pos[..., 2] = top_super_pos[..., 2] + delta_z
-    positions = np.vstack((bottom_super_pos, top_super_pos))
-    number = np.hstack((bottom_super.numbers, top_super.numbers))
-    results = py_atoms_to_ase_atoms(Pyatoms(vectors_b, positions, number))
-    return results
-
+    bottom_super = coincidence(vectors, vectors_b, tran_2D_b, bottom)
+    top_super = coincidence(vectors, vectors_t, tran_2D_t, top_rot)
+    top_super.positions[..., 2] = top_super.positions[..., 2] + delta_z
+    positions = np.vstack((bottom_super.positions, top_super.positions))
+    number = np.hstack((bottom_super.atomic_numbers, top_super.atomic_numbers))
+    results = py_atoms_to_ase_atoms(Pyatoms(vectors, positions, number))
+    return results, Delta
 
 def get_parser():
-    parser = argparse.ArgumentParser(description="A simply script for twist bilayers, could not gernerate heterostures")
+    parser = argparse.ArgumentParser(description="A simply script for heterostures bilayers from given transformation matrix, can not search from twist angle")
     parser.add_argument('-b','--bottom', required=True, help='Path to lower layer, need to be recognized by ASE')
     parser.add_argument('-t','--top', required=True, help='Path to upper layer, need to be recognized by ASE')
-    parser.add_argument('-M', required=True, help='supercell matrix with np.array([[M,N],[-N,M+N]])', type=int)
-    parser.add_argument('-N', required=True, help='supercell matrix with np.array(([M,N],[-N,M+N]])', type=int)
-    parser.add_argument('-z', help='super lattice of z direction, default = 20 A', type=float, default = 20.0)
-    parser.add_argument('-d', help='distance of two layers, default = 4 A', type=float, default = 4.0)
+    parser.add_argument('-a','--angle', help='Multi twist angle',nargs='+', type=float)
+    parser.add_argument('-al','--alist', help='start end step',nargs='+', type=float)
+    parser.add_argument('-tol','--tolerance', help='Delta/moire_lattice (%), default = 1%', type=float, default = 1.0)
+    parser.add_argument('-z', help='super lattice of z direction, default = 60 A', type=float, default = 60.0)
+    parser.add_argument('-d', help='distance of two layers, default = 7 A', type=float, default = 7.0)
     parser.add_argument('-w','--write', help='Path to write supercell, need to be recognized by ASE')
     parser.add_argument('-o','--outformat', help='output file-format, like lammps-data', default = None)
-    parser.add_argument('-a','--angle', help='output twist angle with format of rad or deg, default = deg', default='deg', choices=['rad', 'deg'])
     return parser
 
 if __name__ == '__main__':
@@ -193,18 +197,25 @@ if __name__ == '__main__':
     top = ase.io.read(args.top)
     check_vectors(bottom)
     check_vectors(top)
-    tran_2D_b = np.array([[args.M,args.N],[-args.N,args.M+args.N]])
-    tran_2D_t = np.array([[args.N, args.M], [-args.M, args.M + args.N]])
-    result = gen_supercell(bottom, top, tran_2D_b, tran_2D_t, args.z, args.d)
-    theta = calc_vectors_angle(result.cell[0], bottom.cell[0])
-    if args.angle == 'rad':
-        print("generating twist supercell to arg.write with twist angle {}".format(np.pi/3 - 2*theta.radian))
+    if args.alist == None:
+        for ang in args.angle:
+            result, Delta = gen_supercell(bottom, top, ang, args.z, args.d)
+            num = len(result)
+            formula=result.get_chemical_formula()
+            if Delta*100 < args.tolerance:
+                print("Delta: {1:.2f}, angel: {0:.2f}, num: {2:}".format(ang, Delta*100, num))
+                if args.write == None:
+                    result.write("Super_{0:.2f}_{1}_{2}.xsf".format(ang,num,formula))
+                else:
+                    result.write(args.write, format=args.outformat)
     else:
-        print("generating twist supercell to arg.write with twist angle {}".format(60 - 2*theta.degree))
-    print("Supercell lattice size: {}".format(result.cell.cellpar()[0]))
-    print("Number of atoms: {}".format(len(result)))
-    if args.write == None:
-        result.write("Super_{0:.2f}_{1}.xsf".format(60 - 2*theta.degree, len(result)))
-    else:
-        result.write(args.write, format=args.outformat)
-
+        for ang in np.arange(args.alist[0], args.alist[1], args.alist[2]):
+            result, Delta = gen_supercell(bottom, top, ang, args.z, args.d)
+            num = len(result)
+            formula=result.get_chemical_formula()
+            if Delta*100 < args.tolerance:
+                print("Delta: {1:.2f}, angel: {0:.2f}, num: {2:}".format(ang, Delta*100, num))
+                if args.write == None and Delta < 1.0:
+                    result.write("Super_{0:.2f}_{1}_{2:.2f}.xsf".format(ang,num,Delta*100))
+                else:
+                    result.write(args.write, format=args.outformat)
