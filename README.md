@@ -20,7 +20,7 @@ conda activate moire_env
 2. **Download the Source Code**
 ```
 git clone https://github.com/i-wli/twistHS.git
-cd get_moire
+cd twistHS
 ```
 
 3. **Install Required Packages**:
