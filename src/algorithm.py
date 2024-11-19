@@ -49,6 +49,8 @@ def gen_supercell(bottom: ase.atoms.Atoms,
     omega = bottom.cell.cellpar()[5]
     if float_eq(omega, top.cell.cellpar()[5], prec=1e-3) == False:
         exit('[error] the angle of two layers are different')
+    if p1 == 1 and p2 == 1:
+        exit('[error] homobilayers are usually gnereated by another way: you can check the my branch "old" for the code')
 
     theta_rad = np.radians(theta)
     omega = np.radians(omega)
