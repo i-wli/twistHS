@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
 import ase.io
-from src.func import *
+from twistHS.lib.func import *
 
 """please check 2012 J. Phys.: Condens. Matter 24 314210 for theoretical background"""
 
@@ -49,8 +49,8 @@ def gen_supercell(bottom: ase.atoms.Atoms,
     omega = bottom.cell.cellpar()[5]
     if float_eq(omega, top.cell.cellpar()[5], prec=1e-3) == False:
         exit('[error] the angle of two layers are different')
-    if p1 == 1 and p2 == 1:
-        exit('[error] homobilayers are usually gnereated by another way: you can check the my branch "old" for the code')
+    if p1 == 1 and p2 == 1 and theta == 0:
+        exit('[error] no superlattice to be generated for homostructure at 0 degree')
 
     theta_rad = np.radians(theta)
     omega = np.radians(omega)

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import gradio as gr
 from ase.visualize.plot import plot_atoms
 
-from src.algorithm import get_parser, gen_supercell, check_vectors
+from twistHS.lib.algorithm import get_parser, gen_supercell, check_vectors
 
 class StructureHandler:
     def __init__(self, bottom, top, z, d):
@@ -100,29 +100,33 @@ def main_interface(bottom_file, top_file, angle_start, angle_end, angle_step, z,
     except Exception as e:
         return str(e), None, None, None
 
-iface = gr.Interface(
+def main():
+    iface = gr.Interface(
     fn=main_interface,
     inputs=[
-        gr.File(label="Upload bottom layer file"),
-        gr.File(label="Upload top layer file"),
-        gr.Number(label="Angle start"),
-        gr.Number(label="Angle end"),
-        gr.Number(label="Angle step"),
-        gr.Number(label="z, superlattice constant along z direction"),
-        gr.Number(label="d, distance of two layers"),
-        gr.Number(label="Maximum mismatch (%)"),
-        gr.Number(label="Selected one angle for visualization (Optional)"),
-        gr.Checkbox(label="Save Structure", value=False),
-        gr.Textbox(label="Filename to save structure, default=structure_angle.xsf")
+    gr.File(label="Upload bottom layer file"),
+    gr.File(label="Upload top layer file"),
+    gr.Number(label="Angle start"),
+    gr.Number(label="Angle end"),
+    gr.Number(label="Angle step"),
+    gr.Number(label="z, superlattice constant along z direction"),
+    gr.Number(label="d, distance of two layers"),
+    gr.Number(label="Maximum mismatch (%)"),
+    gr.Number(label="Selected one angle for visualization (Optional)"),
+    gr.Checkbox(label="Save Structure", value=False),
+    gr.Textbox(label="Filename to save structure, default=structure_angle.xsf")
     ],
     outputs=[
-        gr.Textbox(label="Status"),
-        gr.Plot(label="Initial Scatter Plot"),
-        gr.Plot(label="Selected Structure View"),
-        gr.File(label="Download Structure")
+    gr.Textbox(label="Status"),
+    gr.Plot(label="Initial Scatter Plot"),
+    gr.Plot(label="Selected Structure View"),
+    gr.File(label="Download Structure")
     ],
     title="Twisted vdWHS Visualization",
     description="Generate and visualize twisted van der Waals heterostructures."
-)
+    )
 
-iface.launch(inbrowser=True)
+    iface.launch(inbrowser=True)
+
+if __name__ == '__main__':
+    main()

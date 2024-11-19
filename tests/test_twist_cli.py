@@ -1,13 +1,16 @@
 import os
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
+
+project_root = Path(__file__).parent.parent
+sys.path.append(str(project_root))
 
 import pytest
 import numpy as np
 import tempfile
 from unittest.mock import Mock, patch
 from ase import Atoms
-from twist_cli import StructureHandler
+from twistHS.twist_cli import StructureHandler
 
 @pytest.fixture
 def mock_args():
