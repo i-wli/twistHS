@@ -22,6 +22,7 @@ fastapi @ file:///home/conda/feedstock_root/build_artifacts/fastapi_171205657584
 ffmpy @ file:///home/conda/feedstock_root/build_artifacts/ffmpy_1659474992694/work
 filelock @ file:///home/conda/feedstock_root/build_artifacts/filelock_1711394622191/work
 fonttools==4.25.0
+fortls==2.13.0
 fsspec @ file:///home/conda/feedstock_root/build_artifacts/fsspec_1710808267764/work
 gradio @ file:///home/conda/feedstock_root/build_artifacts/gradio_1712359801720/work
 gradio_client @ file:///home/conda/feedstock_root/build_artifacts/gradio-client_1712094402891/work
@@ -35,10 +36,12 @@ hyperframe @ file:///home/conda/feedstock_root/build_artifacts/hyperframe_161911
 idna @ file:///home/conda/feedstock_root/build_artifacts/idna_1701026962277/work
 importlib_metadata @ file:///home/conda/feedstock_root/build_artifacts/importlib-metadata_1710971335535/work
 importlib_resources @ file:///home/conda/feedstock_root/build_artifacts/importlib_resources_1711040877059/work
+iniconfig==2.0.0
 ipykernel @ file:///Users/runner/miniforge3/conda-bld/ipykernel_1708996616394/work
 ipython @ file:///home/conda/feedstock_root/build_artifacts/ipython_1709559745751/work
 jedi @ file:///home/conda/feedstock_root/build_artifacts/jedi_1696326070614/work
 Jinja2 @ file:///home/conda/feedstock_root/build_artifacts/jinja2_1704966972576/work
+json5==0.9.24
 jsonschema @ file:///home/conda/feedstock_root/build_artifacts/jsonschema-meta_1705707496704/work
 jsonschema-specifications @ file:///tmp/tmpkv1z7p57/src
 jupyter_client @ file:///home/conda/feedstock_root/build_artifacts/jupyter_client_1710255804825/work
@@ -62,6 +65,7 @@ pickleshare @ file:///home/conda/feedstock_root/build_artifacts/pickleshare_1602
 pillow @ file:///private/var/folders/nz/j6p8yfhx1mv_0grj5xl4650h0000gp/T/abs_e02b4k5qik/croot/pillow_1707233036487/work
 pkgutil_resolve_name @ file:///home/conda/feedstock_root/build_artifacts/pkgutil-resolve-name_1694617248815/work
 platformdirs @ file:///home/conda/feedstock_root/build_artifacts/platformdirs_1706713388748/work
+pluggy==1.5.0
 prompt-toolkit @ file:///home/conda/feedstock_root/build_artifacts/prompt-toolkit_1702399386289/work
 psutil @ file:///Users/runner/miniforge3/conda-bld/psutil_1705722460205/work
 ptyprocess @ file:///home/conda/feedstock_root/build_artifacts/ptyprocess_1609419310487/work/dist/ptyprocess-0.7.0-py2.py3-none-any.whl
@@ -72,6 +76,7 @@ pydub @ file:///home/conda/feedstock_root/build_artifacts/pydub_1615612442567/wo
 Pygments @ file:///home/conda/feedstock_root/build_artifacts/pygments_1700607939962/work
 pyparsing @ file:///Users/builder/cbouss/perseverance-python-buildout/croot/pyparsing_1699239441347/work
 PySocks @ file:///home/conda/feedstock_root/build_artifacts/pysocks_1661604839144/work
+pytest==8.3.3
 python-dateutil @ file:///tmp/build/80754af9/python-dateutil_1626374649649/work
 python-multipart @ file:///home/conda/feedstock_root/build_artifacts/python-multipart_1707760088566/work
 pytz @ file:///home/conda/feedstock_root/build_artifacts/pytz_1706886791323/work

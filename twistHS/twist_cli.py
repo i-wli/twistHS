@@ -6,7 +6,7 @@ from matplotlib.backend_bases import MouseButton
 from matplotlib.collections import PathCollection
 from matplotlib.widgets import Button
 
-from src.algorithm import get_parser, gen_supercell, check_vectors
+from twistHS.lib.algorithm import get_parser, gen_supercell, check_vectors
 
 class StructureHandler:
     def __init__(self, angles, bottom, top, args, results):

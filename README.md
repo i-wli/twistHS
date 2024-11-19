@@ -12,20 +12,21 @@ Only first-order moirés are considered for direct comparison of different twist
 ## Installation
 
 1. **Set Up Environment**:
-It is recommended to create a new Conda environment for running this project to avoid any conflicts with existing packages. You can create a new environment with Python 12 as follows:
+It is recommended to create a new Conda environment for running this project to avoid any conflicts with existing packages. You can create a new environment with Python 3.12 as follows:
 ```
-conda create --name moire_env python=12
+conda create --name moire_env python=3.12 pip
 conda activate moire_env
 ```
-2. **Download the Source Code**
+2. **Install the Package Directly from GitHub**:
+```
+pip install git+https://github.com/i-wli/twistHS.git
+```
+
+2.1 **Development Installation with source code**:
 ```
 git clone https://github.com/i-wli/twistHS.git
 cd twistHS
-```
-
-3. **Install Required Packages**:
-```
-pip install -r requirements.txt
+pip install .
 ```
 
 ## Usage
@@ -34,7 +35,7 @@ pip install -r requirements.txt
 
 Open your command-line interface and run:
 ```
-python twist_cli.py [options]
+twist_cli [options]
 ```
 This should open a matplotlib interface:
 ![image](https://github.com/i-wli/twistHS/blob/main/docs/cli.gif)
@@ -44,7 +45,7 @@ This should open a matplotlib interface:
 
 To launch the GUI, simply run:
 ```
-python twist_gui.py
+twist_gui
 ```
 
 Once the GUI is open, you should see:

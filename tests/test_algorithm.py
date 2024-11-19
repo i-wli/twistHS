@@ -1,12 +1,15 @@
 import os
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
+
+project_root = Path(__file__).parent.parent
+sys.path.append(str(project_root))
 
 import pytest
 import numpy as np
 from ase import Atoms
 from ase.build import bulk
-from src.algorithm import gen_supercell, check_vectors
+from twistHS.lib.algorithm import gen_supercell, check_vectors
 
 @pytest.fixture
 def test_structures():
@@ -26,7 +29,6 @@ def test_structures():
                   cell=[[a, 0, 0],
                         [-a/2, a*np.sqrt(3)/2, 0],
                         [0, 0, 15]])
-    # top = bottom.copy()
     return bottom, top
 
 def test_gen_supercell_basic(test_structures):
@@ -69,7 +71,7 @@ def test_gen_supercell_rotation(test_structures):
     
     result, _ = gen_supercell(bottom, top, theta, super_z, delta_z)
     
-    # Number of atoms should increase due to mismatch
+    # Number of atoms should increase - superlattice is generated
     assert len(result) > len(bottom) + len(top)
 
 def test_gen_supercell_different_angles():
