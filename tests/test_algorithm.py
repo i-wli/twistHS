@@ -9,7 +9,7 @@ import pytest
 import numpy as np
 from ase import Atoms
 from ase.build import bulk
-from twistHS.lib.algorithm import gen_supercell, check_vectors
+from twistHS.lib.algorithm import HSGenerator, check_vectors
 
 @pytest.fixture
 def test_structures():
@@ -38,7 +38,8 @@ def test_gen_supercell_basic(test_structures):
     super_z = 15.0  # Å
     delta_z = 3.4  # Å
     
-    result, delta = gen_supercell(bottom, top, theta, super_z, delta_z)
+    twistSupercell = HSGenerator(bottom, top)
+    result, delta = twistSupercell.gen_supercell(theta, super_z, delta_z)
     
     assert isinstance(result, Atoms)
     assert isinstance(delta, float)
@@ -53,7 +54,8 @@ def test_gen_supercell_layer_separation(test_structures):
     super_z = 15.0
     delta_z = 3.4
     
-    result, _ = gen_supercell(bottom, top, theta, super_z, delta_z)
+    twistSupercell = HSGenerator(bottom, top)
+    result, _ = twistSupercell.gen_supercell(theta, super_z, delta_z)
     
     # Get z-coordinates
     z_coords = result.positions[:, 2]
@@ -69,7 +71,8 @@ def test_gen_supercell_rotation(test_structures):
     super_z = 15.0
     delta_z = 3.4
     
-    result, _ = gen_supercell(bottom, top, theta, super_z, delta_z)
+    twistSupercell = HSGenerator(bottom, top)
+    result, _ = twistSupercell.gen_supercell(theta, super_z, delta_z)
     
     # Number of atoms should increase - superlattice is generated
     assert len(result) > len(bottom) + len(top)
@@ -90,8 +93,9 @@ def test_gen_supercell_different_angles():
                       [1, 2, 0],
                       [0, 0, 15]])
     
-    with pytest.raises(SystemExit):
-        gen_supercell(bottom, top, 5.0, 15.0, 3.4)
+    with pytest.raises(ValueError, match="The angles of two layers are different"):
+        twistSupercell = HSGenerator(bottom, top)
+        twistSupercell.gen_supercell(5.0, 15.0, 3.4)
 
 def test_gen_supercell_zero_angle(test_structures):
     """Test behavior with zero rotation angle"""
@@ -100,7 +104,8 @@ def test_gen_supercell_zero_angle(test_structures):
     super_z = 15.0
     delta_z = 3.4
     
-    result, _ = gen_supercell(bottom, top, theta, super_z, delta_z)
+    twistSupercell = HSGenerator(bottom, top)
+    result, _ = twistSupercell.gen_supercell(theta, super_z, delta_z)
 
     assert result.cell.cellpar()[3] == pytest.approx(bottom.cell.cellpar()[3], rel=1e-5)
 
