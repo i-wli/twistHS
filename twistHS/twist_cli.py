@@ -6,9 +6,9 @@ from matplotlib.backend_bases import MouseButton
 from matplotlib.collections import PathCollection
 from matplotlib.widgets import Button
 
-from twistHS.lib.algorithm import get_parser, gen_supercell, check_vectors
+from twistHS.lib.algorithm import get_parser, HSGenerator
 
-class StructureHandler:
+class StructureVisualizer:
     def __init__(self, angles, bottom, top, args, results):
         self.current_structure = None
         self.ang = 0
@@ -56,13 +56,13 @@ def main():
     args = parser.parse_args()
     bottom = ase.io.read(args.bottom)
     top = ase.io.read(args.top)
-    check_vectors(bottom)
-    check_vectors(top)
 
     nums = []
     angles = []
     Deltas = []
     results = []
+
+    twistSupercell = HSGenerator(bottom, top)
 
     if args.alist is None:
         angles = args.angle
@@ -70,7 +70,7 @@ def main():
         angles = np.arange(args.alist[0], args.alist[1], args.alist[2])
 
     for ang in angles:
-        result, Delta = gen_supercell(bottom, top, ang, args.z, args.d)
+        result, Delta = twistSupercell.gen_supercell(ang, args.z, args.d)
         num = len(result)
         nums.append(num)
         Deltas.append(Delta)
@@ -84,7 +84,7 @@ def main():
     plt.ylabel('Number of Atoms')
     plt.title('Click one point to see the structure.')
 
-    handler = StructureHandler(angles, bottom, top, args, results)
+    handler = StructureVisualizer(angles, bottom, top, args, results)
 
     plt.gcf().canvas.mpl_connect('pick_event', handler.onpick)
 

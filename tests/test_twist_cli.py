@@ -10,7 +10,7 @@ import numpy as np
 import tempfile
 from unittest.mock import Mock, patch
 from ase import Atoms
-from twistHS.twist_cli import StructureHandler
+from twistHS.twist_cli import StructureVisualizer
 
 @pytest.fixture
 def mock_args():
@@ -47,10 +47,10 @@ def handler(test_structures, mock_args):
     angles = [0.0, 1.0, 2.0]
     Delta = 0.01
     results = [(bottom.copy(), Delta) for _ in range(3)]
-    return StructureHandler(angles, bottom, top, mock_args, results)
+    return StructureVisualizer(angles, bottom, top, mock_args, results)
 
 def test_initialization(handler):
-    """Test StructureHandler initialization"""
+    """Test StructureVisualizer initialization"""
     assert handler.current_structure is None
     assert handler.ang == 0
     assert handler.num == 0

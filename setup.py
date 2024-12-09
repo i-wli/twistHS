@@ -6,7 +6,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name="twistHS",
-    version="1.1.0",
+    version="1.2.0",
     description="A package for twisted heterostructure generation",
     long_description=long_description,
     long_description_content_type="text/markdown",

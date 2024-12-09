@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 import gradio as gr
 from ase.visualize.plot import plot_atoms
 
-from twistHS.lib.algorithm import get_parser, gen_supercell, check_vectors
+from twistHS.lib.algorithm import get_parser, HSGenerator
 
-class StructureHandler:
+class StructureVisualizer:
     def __init__(self, bottom, top, z, d):
         self.bottom = bottom
         self.top = top
@@ -20,8 +20,10 @@ class StructureHandler:
         results = []
         valid_angles = []
 
+        twistSupercell = HSGenerator(self.bottom, self.top)
+
         for ang in angles:
-            result, Delta = gen_supercell(self.bottom, self.top, ang, self.z, self.d)
+            result, Delta = twistSupercell.gen_supercell(ang, self.z, self.d)
             if Delta * 100 < tolerance:
                 num = len(result)
                 nums.append(num)
@@ -73,10 +75,8 @@ def main_interface(bottom_file, top_file, angle_start, angle_end, angle_step, z,
     try:
         bottom = ase.io.read(bottom_file.name)
         top = ase.io.read(top_file.name)
-        check_vectors(bottom)
-        check_vectors(top)
         
-        handler = StructureHandler(bottom, top, z, d)
+        handler = StructureVisualizer(bottom, top, z, d)
         initial_plot, angles, results = handler.generate_initial_plot(angle_start, angle_end, angle_step, tol)
         if initial_plot is None:
             return "No valid structures found in the given range.", None, None, None
