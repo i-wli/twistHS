@@ -44,7 +44,7 @@ def test_gen_supercell_basic(test_structures):
     assert isinstance(result, Atoms)
     assert isinstance(delta, float)
     assert delta >= 0
-    assert len(result) > len(bottom) + len(top)
+    assert len(result) == 524
     assert result.cell[2][2] == pytest.approx(super_z, rel=1e-5)
 
 def test_gen_supercell_layer_separation(test_structures):
@@ -77,25 +77,17 @@ def test_gen_supercell_rotation(test_structures):
     # Number of atoms should increase - superlattice is generated
     assert len(result) > len(bottom) + len(top)
 
-def test_gen_supercell_different_angles():
-    """Test error handling when layers have different angles"""
-    # Create bottom layer with 60° angle
-    bottom = Atoms('C2',
-                  positions=[[0, 0, 0], [1, 0, 0]],
-                  cell=[[2, 0, 0],
-                        [1, np.sqrt(3), 0],
-                        [0, 0, 15]])
-    
-    # Create top layer with different angle
-    top = Atoms('C2',
-                positions=[[0, 0, 0], [1, 0, 0]],
-                cell=[[2, 0, 0],
-                      [1, 2, 0],
-                      [0, 0, 15]])
-    
-    with pytest.raises(ValueError, match="The angles of two layers are different"):
-        twistSupercell = HSGenerator(bottom, top)
-        twistSupercell.gen_supercell(5.0, 15.0, 3.4)
+def test_gen_supercell_different_angles(test_structures):
+    """Equivalent 60° and 120° graphene bases give the same approximant."""
+    bottom, top = test_structures
+    reference, reference_strain = HSGenerator(bottom, top).gen_supercell(5, 30, 3.4)
+    equivalent = top.copy()
+    equivalent.cell[1] += equivalent.cell[0]
+    assert equivalent.cell.cellpar()[5] == pytest.approx(60)
+    result, strain = HSGenerator(bottom, equivalent).gen_supercell(5, 30, 3.4)
+    assert len(result) == len(reference)
+    assert strain == pytest.approx(reference_strain, abs=1e-12)
+    np.testing.assert_allclose(result.cell, reference.cell, atol=1e-12)
 
 def test_gen_supercell_zero_angle(test_structures):
     """Test behavior with zero rotation angle"""
@@ -108,6 +100,57 @@ def test_gen_supercell_zero_angle(test_structures):
     result, _ = twistSupercell.gen_supercell(theta, super_z, delta_z)
 
     assert result.cell.cellpar()[3] == pytest.approx(bottom.cell.cellpar()[3], rel=1e-5)
+
+@pytest.mark.parametrize('theta', [np.degrees(np.arccos(13 / 14)), 60 - np.degrees(np.arccos(13 / 14))])
+def test_graphene_exact_commensurate(test_structures, theta):
+    bottom, _ = test_structures
+    result, strain = HSGenerator(bottom, bottom).gen_supercell(theta, 30, 3.4)
+    assert len(result) == 28
+    assert strain < 1e-9
+
+
+@pytest.mark.parametrize('theta', [0, 5, 12])
+def test_atom_count_from_determinants(test_structures, theta):
+    from twistHS.lib.moire import supercell_matrices
+    bottom, top = test_structures
+    rotated = top.copy()
+    rotated.rotate(theta, 'z', rotate_cell=True)
+    M_b, M_t = supercell_matrices(bottom.cell[:2, :2], rotated.cell[:2, :2])
+    result, _ = HSGenerator(bottom, top).gen_supercell(theta, 30, 3.4)
+    expected = round(abs(np.linalg.det(M_b))) * len(bottom) + round(abs(np.linalg.det(M_t))) * len(top)
+    assert len(result) == expected
+    assert np.all(np.isfinite(result.positions))
+    assert result.cell.volume > 0
+
+
+@pytest.mark.parametrize('U,V', [
+    ([[1, 5], [0, 1]], [[2, 3], [1, 2]]),
+    ([[0, 1], [-1, 0]], [[1, 0], [1, 1]]),
+    ([[0, 1], [1, 0]], [[1, 0], [0, 1]]),
+])
+def test_supercell_basis_invariance(test_structures, U, V):
+    bottom, top = test_structures
+    reference, expected_strain = HSGenerator(bottom, top).gen_supercell(5, 30, 3.4)
+    bottom, top = bottom.copy(), top.copy()
+    bottom.cell[:2, :2] = U @ bottom.cell[:2, :2]
+    top.cell[:2, :2] = V @ top.cell[:2, :2]
+    result, strain = HSGenerator(bottom, top).gen_supercell(5, 30, 3.4)
+    assert len(result) == len(reference)
+    assert strain == pytest.approx(expected_strain, abs=1e-12)
+    assert result.cell.volume == pytest.approx(reference.cell.volume)
+    # Positions describe the same atoms modulo the reference supercell.
+    frac = result.positions @ np.linalg.inv(reference.cell)
+    expected_frac = reference.positions @ np.linalg.inv(reference.cell)
+    offsets = frac[:, None, :] - expected_frac[None, :, :]
+    offsets -= np.rint(offsets)
+    assert np.max(np.min(np.linalg.norm(offsets, axis=2), axis=1)) < 1e-10
+
+
+def test_zero_twist_homobilayer_raises(test_structures):
+    bottom, _ = test_structures
+    with pytest.raises(ValueError, match='singular'):
+        HSGenerator(bottom, bottom).gen_supercell(0, 30, 3.4)
+
 
 if __name__ == "__main__":
     pytest.main(["-v", "test_algorithm.py"])

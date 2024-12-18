@@ -1,7 +1,21 @@
 # Twisted Heterostructure Generation Toolkit
 A Python-based solution for generating twisted heterostructures through both a Command-Line Interface (CLI) and a Graphical User Interface (GUI). Whether you are a researcher, student, or hobbyist interested in the fascinating world of moiré patterns, this toolkit is designed to provide a flexible and user-friendly approach to exploring these patterns.
 
-Only first-order moirés are considered for direct comparison of different twist angles. Please check 2012 J. Phys.: Condens. Matter 24 314210 for theoretical background.
+First-order moiré geometry uses arbitrary nonsingular 2D lattice matrices with
+basis vectors stored as rows. The top lattice includes the requested rotation.
+The bottom basis is Gauss-reduced, and each bottom reciprocal vector is paired
+with its nearest top reciprocal vector. A one-to-one (unimodular) pairing is
+required. For the aligned real-space bases, the moiré lattice is
+`A_M = (A_b^-1 - A_t^-1)^-1`, with reciprocal bases `B = 2π A^-T`.
+This includes the aligned special case of
+[Hermann (2012)](https://doi.org/10.1088/0953-8984/24/31/314210), and supports
+different lattice angles and equivalent primitive bases.
+
+Atomic structures are approximants obtained by rounding transformation matrices
+in the aligned working bases and averaging the resulting layer cells to a common
+cell. This rounding procedure does not search for a
+minimum-area or minimum-strain commensurate supercell. Singular moiré geometry,
+non-unimodular first-order pairing, and singular rounded cells raise errors.
 
 ## Features
 
