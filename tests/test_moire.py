@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from twistHS.lib.moire import (
-    moire_lattice, nearest_lattice_vector, reciprocal_2d, reduce_basis,
+    moire_lattice, nearest_lattice_vector, principal_strains, reciprocal_2d, reduce_basis,
 )
 
 
@@ -63,6 +63,16 @@ def test_nearest_vector_not_fractional_rounding():
     expected = np.min(np.linalg.norm(indices @ B - target, axis=1))
     assert np.linalg.norm(n @ B - target) == pytest.approx(expected)
     assert np.linalg.norm(n @ B - target) < np.linalg.norm(np.rint(target @ np.linalg.inv(B)) @ B - target)
+
+
+def test_principal_strains_stretch_rotation_and_basis():
+    layer = np.array([[2., 0.1], [0.5, 3.]])
+    F = rotation(27).T @ np.diag([1.03, 0.98])
+    common = layer @ F.T
+    np.testing.assert_allclose(principal_strains(layer, common), [0.03, -0.02], atol=1e-14)
+    U = np.array([[1, 4], [0, 1]])
+    np.testing.assert_allclose(principal_strains(U @ layer, U @ common), [0.03, -0.02], atol=1e-14)
+    np.testing.assert_allclose(principal_strains(layer @ rotation(13), common @ rotation(13)), [0.03, -0.02], atol=1e-14)
 
 
 @pytest.mark.parametrize('top', [hexagonal(2.46), np.diag([1, 1.02]) @ hexagonal(2.46)])

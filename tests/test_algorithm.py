@@ -146,10 +146,36 @@ def test_supercell_basis_invariance(test_structures, U, V):
     assert np.max(np.min(np.linalg.norm(offsets, axis=2), axis=1)) < 1e-10
 
 
+def test_rectangular_anisotropic_strain():
+    bottom = Atoms('C', positions=[[0, 0, 0]], cell=[3, 4, 15])
+    top = Atoms('C', positions=[[0, 0, 0]], cell=[3.1, 4.3, 15])
+    _, strain = HSGenerator(bottom, top).gen_supercell(0, 30, 3.4)
+    assert strain == pytest.approx(8.94454382826e-4)
+
+
 def test_zero_twist_homobilayer_raises(test_structures):
     bottom, _ = test_structures
     with pytest.raises(ValueError, match='singular'):
         HSGenerator(bottom, bottom).gen_supercell(0, 30, 3.4)
+
+
+def test_scan_filters_inclusive_tolerance(test_structures):
+    generator = HSGenerator(*test_structures)
+    angles = np.arange(1, 7)
+    strains = [generator.gen_supercell(a, 30, 3.4)[1] for a in angles]
+    tolerance = sorted(strains)[2] * 100
+    results = generator.scan(angles, 30, 3.4, tolerance)
+    assert [angle for angle, _, _ in results] == [angle for angle, strain in zip(angles, strains) if strain * 100 <= tolerance]
+    assert len(results) == 3
+    assert generator.scan(angles, 30, 3.4, 0) == []
+
+
+def test_graphene_mos2_scan():
+    import ase.io
+    bottom = ase.io.read(Path(__file__).parent / 'graphene.xsf')
+    top = ase.io.read(Path(__file__).parent / 'MoS2.xsf')
+    results = HSGenerator(bottom, top).scan(np.arange(10), 30, 7, 0.5)
+    assert [angle for angle, _, _ in results] == list(range(2, 9))
 
 
 if __name__ == "__main__":

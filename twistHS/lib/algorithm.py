@@ -4,7 +4,7 @@ import numpy as np
 import ase.io
 from typing import Tuple
 from twistHS.lib.func import *
-from twistHS.lib.moire import supercell_matrices
+from twistHS.lib.moire import principal_strains, supercell_matrices
 
 class HSGenerator:
     """Generates twisted vdW heterostructure supercells."""
@@ -40,7 +40,7 @@ class HSGenerator:
             delta_z: distance between two layers            
         
         Returns:
-            (Atoms, float): supercell structure and mismatch ratio
+            (Atoms, float): structure and maximum absolute principal strain
         """
         top_rot = self.top.copy()
         top_rot.rotate(theta, 'z', rotate_cell=True)
@@ -49,7 +49,10 @@ class HSGenerator:
         vectors_b = get_supercell_vecs(tran_2D_b, self.bottom.cell, super_z)
         vectors_t = get_supercell_vecs(tran_2D_t, top_rot.cell, super_z)
         vectors = (vectors_b + vectors_t)/2
-        Delta = calc_vector_norm(vectors_t[0,:2] - vectors_b[0,:2])/calc_vector_norm(vectors[0,:2])
+        Delta = float(max(
+            np.max(np.abs(principal_strains(vectors_b[:2, :2], vectors[:2, :2]))),
+            np.max(np.abs(principal_strains(vectors_t[:2, :2], vectors[:2, :2]))),
+        ))
 
         """Get atom position"""
         bottom_super = self._coincidence(vectors, vectors_b, tran_2D_b, self.bottom)
@@ -60,6 +63,19 @@ class HSGenerator:
         results = py_atoms_to_ase_atoms(Pyatoms(vectors, positions, number))
         return results, Delta
 
+    def scan(self, angles, super_z, delta_z, tolerance):
+        """Return (angle, structure, strain) entries within tolerance in percent.
+
+        Invalid geometry raises immediately; it is not silently omitted.
+        """
+        results = []
+        for angle in angles:
+            structure, strain = self.gen_supercell(angle, super_z, delta_z)
+            if strain * 100 <= tolerance:
+                results.append((angle, structure, strain))
+        return results
+
+
 
 def get_parser():
     parser = argparse.ArgumentParser(description="Generate twisted van der Waals heterostructures.")
@@ -67,7 +83,7 @@ def get_parser():
     parser.add_argument('-t','--top', required=True, help='Path to upper layer, need to be recognized by ASE')
     parser.add_argument('-a','--angle', help='Multi twist angle',nargs='+', type=float)
     parser.add_argument('-al','--alist', help='start end step',nargs='+', type=float)
-    parser.add_argument('-tol','--tolerance', help='Delta/moire_lattice (%%), default = 1%%', type=float, default = 1.0)
+    parser.add_argument('-tol','--tolerance', help='max principal strain of either layer (%%), default = 1%%', type=float, default = 1.0)
     parser.add_argument('-z', help='superlattice constant along z direction, default = 30 A', type=float, default = 30.0)
     parser.add_argument('-d', help='distance of two layers, default = 7 A', type=float, default = 7.0)
     parser.add_argument('-w','--write', help='Path to write supercell, need to be recognized by ASE')

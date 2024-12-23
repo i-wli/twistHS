@@ -15,35 +15,23 @@ class StructureVisualizer:
 
     def generate_initial_plot(self, angle_start, angle_end, angle_step, tolerance):
         angles = np.arange(angle_start, angle_end, angle_step)
-        nums = []
-        Deltas = []
-        results = []
-        valid_angles = []
-
         twistSupercell = HSGenerator(self.bottom, self.top)
-
-        for ang in angles:
-            result, Delta = twistSupercell.gen_supercell(ang, self.z, self.d)
-            if Delta * 100 < tolerance:
-                num = len(result)
-                nums.append(num)
-                Deltas.append(Delta)
-                results.append((result, Delta))
-                valid_angles.append(ang)
-
-        if nums == []:
+        entries = twistSupercell.scan(angles, self.z, self.d, tolerance)
+        if not entries:
             return None, None, None
 
-        nums = np.array(nums)
-        Deltas = np.array(Deltas) * 100
+        valid_angles = np.array([angle for angle, _, _ in entries])
+        nums = np.array([len(result) for _, result, _ in entries])
+        Deltas = np.array([strain for _, _, strain in entries]) * 100
+        results = [(result, strain) for _, result, strain in entries]
         fig, ax = plt.subplots()
         scatter = ax.scatter(valid_angles, nums, c=Deltas, picker=True)
-        plt.colorbar(scatter, label='Mismatch (%)')
+        plt.colorbar(scatter, label='Max strain (%)')
         plt.xlabel(r'Twist Angle ($^{\circ}$)')
         plt.ylabel('Number of Atoms')
         plt.title('Num vs Angle')
         plt.close()
-        return fig, angles, results
+        return fig, valid_angles, results
 
     def generate_detailed_structure(self, selected_angle, angles, results):
         try:
@@ -111,7 +99,7 @@ def main():
     gr.Number(label="Angle step"),
     gr.Number(label="z, superlattice constant along z direction"),
     gr.Number(label="d, distance of two layers"),
-    gr.Number(label="Maximum mismatch (%)"),
+    gr.Number(label="Max principal strain of either layer (%)"),
     gr.Number(label="Selected one angle for visualization (Optional)"),
     gr.Checkbox(label="Save Structure", value=False),
     gr.Textbox(label="Filename to save structure, default=structure_angle.xsf")

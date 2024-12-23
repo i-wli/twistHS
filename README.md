@@ -13,7 +13,11 @@ different lattice angles and equivalent primitive bases.
 
 Atomic structures are approximants obtained by rounding transformation matrices
 in the aligned working bases and averaging the resulting layer cells to a common
-cell. This rounding procedure does not search for a
+cell `C`. For each layer, `F = (C_layer^-1 C)^T`; its principal strains are
+`svd(F) - 1`. The reported `Delta` is the maximum absolute principal strain over
+both layers. CLI and GUI retain only structures with `Delta*100 <= tolerance`.
+`--tolerance` is therefore a strain percentage, and differs from the former
+single-vector mismatch measure. This rounding procedure does not search for a
 minimum-area or minimum-strain commensurate supercell. Singular moiré geometry,
 non-unimodular first-order pairing, and singular rounded cells raise errors.
 

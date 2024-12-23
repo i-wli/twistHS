@@ -116,3 +116,9 @@ def supercell_matrices(A_b, A_t):
         M_b[1] *= -1
         M_t[1] *= -1
     return M_b, M_t
+
+
+def principal_strains(C_layer, C):
+    """Return engineering principal strains of the deformation into common C."""
+    F = np.linalg.solve(_lattice(C_layer), _lattice(C)).T
+    return np.linalg.svd(F, compute_uv=False) - 1

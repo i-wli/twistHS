@@ -108,5 +108,28 @@ def test_save_structure(handler):
         
         assert os.path.exists(handler.args.write)
 
+
+def test_main_filters_angles_and_results(monkeypatch):
+    from twistHS.twist_cli import main
+    root = Path(__file__).parent
+    monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', str(root / 'graphene.xsf'),
+                        '-t', str(root / 'MoS2.xsf'), '-al', '0', '10', '1', '-tol', '0.5'])
+    with patch('twistHS.twist_cli.StructureVisualizer') as visualizer, patch('matplotlib.pyplot.show'):
+        main()
+    angles, _, _, _, results = visualizer.call_args.args
+    np.testing.assert_array_equal(angles, np.arange(2, 9))
+    assert len(results) == len(angles)
+    assert all(strain * 100 <= 0.5 for _, strain in results)
+
+
+def test_main_no_structure_within_tolerance(monkeypatch):
+    from twistHS.twist_cli import main
+    root = Path(__file__).parent
+    monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', str(root / 'graphene.xsf'),
+                        '-t', str(root / 'MoS2.xsf'), '-a', '0', '-tol', '0'])
+    with pytest.raises(SystemExit, match='No structure within the strain tolerance'):
+        main()
+
+
 if __name__ == '__main__':
     pytest.main(['-v'])

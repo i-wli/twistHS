@@ -30,7 +30,7 @@ class StructureVisualizer:
             supercell = self.current_result.copy()
             supercell.wrap()
             plot_atoms(supercell, ax, scale=2, radii=0.3, rotation=('0x,0y,0z'))
-            plt.title(f"Angle: {self.ang:.2f}, Num: {self.num}, Mismatch: {self.Delta*100:.2f}%")
+            plt.title(f"Angle: {self.ang:.2f}, Num: {self.num}, Max strain: {self.Delta*100:.2f}%")
             ax.set_axis_off()
             axsave = plt.axes([0.81, 0.05, 0.1, 0.075])
             btn_save = Button(axsave, 'Save')
@@ -57,11 +57,6 @@ def main():
     bottom = ase.io.read(args.bottom)
     top = ase.io.read(args.top)
 
-    nums = []
-    angles = []
-    Deltas = []
-    results = []
-
     twistSupercell = HSGenerator(bottom, top)
 
     if args.alist is None:
@@ -69,17 +64,15 @@ def main():
     else:
         angles = np.arange(args.alist[0], args.alist[1], args.alist[2])
 
-    for ang in angles:
-        result, Delta = twistSupercell.gen_supercell(ang, args.z, args.d)
-        num = len(result)
-        nums.append(num)
-        Deltas.append(Delta)
-        results.append((result, Delta))
-
-    nums = np.array(nums)
-    Deltas = np.array(Deltas) * 100
+    entries = twistSupercell.scan(angles, args.z, args.d, args.tolerance)
+    if not entries:
+        raise SystemExit('[err] No structure within the strain tolerance')
+    angles = np.array([angle for angle, _, _ in entries])
+    nums = np.array([len(result) for _, result, _ in entries])
+    Deltas = np.array([strain for _, _, strain in entries]) * 100
+    results = [(result, strain) for _, result, strain in entries]
     scatter = plt.scatter(angles, nums, c=Deltas, picker=True)
-    plt.colorbar(scatter, label='Mismatch (%)')
+    plt.colorbar(scatter, label='Max strain (%)')
     plt.xlabel(r'Twist Angle ($^{\circ}$)')
     plt.ylabel('Number of Atoms')
     plt.title('Click one point to see the structure.')
