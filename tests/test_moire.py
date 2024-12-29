@@ -2,7 +2,8 @@ import numpy as np
 import pytest
 
 from twistHS.lib.moire import (
-    moire_lattice, nearest_lattice_vector, principal_strains, reciprocal_2d, reduce_basis,
+    moire_components, moire_lattice, nearest_lattice_vector,
+    principal_strains, reciprocal_2d, reduce_basis, supercell_matrices,
 )
 
 
@@ -75,6 +76,56 @@ def test_principal_strains_stretch_rotation_and_basis():
     np.testing.assert_allclose(principal_strains(layer @ rotation(13), common @ rotation(13)), [0.03, -0.02], atol=1e-14)
 
 
+def test_first_order_components_period_and_multiplicity():
+    a_b, a_t, theta = 2.46, 2.504, 5
+    components = moire_components(hexagonal(a_b), hexagonal(a_t) @ rotation(theta), 1)
+    assert len(components) == 1
+    c = components[0]
+    expected = np.sqrt(3) / 2 * a_b * a_t / np.sqrt(a_b**2 + a_t**2 - 2 * a_b * a_t * np.cos(np.radians(theta)))
+    assert c.period == pytest.approx(expected)
+    assert c.order == pytest.approx(1)
+    assert c.multiplicity == 3
+
+
+def test_higher_index_sqrt_three_component():
+    bottom = hexagonal(2.46)
+    epsilon = 0.01
+    top = np.sqrt(3) * (1 + epsilon) * bottom @ rotation(30)
+    components = moire_components(bottom, top, 2)
+    c = next(c for c in components if np.isclose(c.order, np.sqrt(3)))
+    expected = 2 * np.pi * (1 + epsilon) / (epsilon * np.linalg.norm(reciprocal_2d(bottom)[0]))
+    assert c.period == pytest.approx(expected)
+    assert c.multiplicity == 3
+    with pytest.raises(ValueError, match='one-to-one first-order pairing'):
+        supercell_matrices(bottom, top)
+
+
+@pytest.mark.parametrize('U,V', [
+    ([[1, 5], [0, 1]], [[2, 3], [1, 2]]),
+    ([[0, 1], [1, 0]], [[0, -1], [1, 0]]),
+])
+def test_components_basis_invariance(U, V):
+    bottom = hexagonal(2.46)
+    top = hexagonal(2.504) @ rotation(5)
+    original = moire_components(bottom, top, 4)
+    changed = moire_components(U @ bottom, V @ top, 4)
+    assert len(original) == len(changed)
+    for a, b in zip(original, changed):
+        assert a.order == pytest.approx(b.order)
+        assert a.period == pytest.approx(b.period)
+        assert a.multiplicity == b.multiplicity
+        np.testing.assert_allclose(b.q, np.array(b.n) @ reciprocal_2d(U @ bottom) - np.array(b.m) @ reciprocal_2d(V @ top), atol=1e-12)
+        from math import gcd
+        assert gcd(*b.n, *b.m) == 1
+
+
+def test_coincident_components_have_infinite_period():
+    components = moire_components(hexagonal(2.46), hexagonal(2.46), 2)
+    assert len(components) == 2  # order 1 and √3; order 2 is a harmonic
+    assert all(np.isinf(c.period) and np.isnan(c.angle_deg) for c in components)
+    assert all(c.multiplicity == 3 for c in components)
+
+
 @pytest.mark.parametrize('top', [hexagonal(2.46), np.diag([1, 1.02]) @ hexagonal(2.46)])
 def test_no_finite_two_dimensional_moire(top):
     with pytest.raises(ValueError, match='singular'):
@@ -88,3 +139,9 @@ def test_near_zero_twist_geometry():
     assert np.all(np.isfinite(moire))
     expected_length = 2.46 / (2 * np.sin(np.radians(theta) / 2))
     np.testing.assert_allclose(np.linalg.norm(moire, axis=1), expected_length, rtol=1e-8)
+
+
+@pytest.mark.parametrize('max_order', [0, -1, float('inf')])
+def test_invalid_order(max_order):
+    with pytest.raises(ValueError, match='max_order'):
+        moire_components(np.eye(2), 1.01 * np.eye(2), max_order)

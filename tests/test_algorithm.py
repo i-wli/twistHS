@@ -170,6 +170,17 @@ def test_scan_filters_inclusive_tolerance(test_structures):
     assert generator.scan(angles, 30, 3.4, 0) == []
 
 
+def test_components_use_rotated_top_without_supercell(test_structures):
+    from twistHS.lib.moire import moire_components
+    bottom, top = test_structures
+    rotated = top.copy()
+    rotated.rotate(5, 'z', rotate_cell=True)
+    expected = moire_components(bottom.cell[:2, :2], rotated.cell[:2, :2], 2)
+    actual = HSGenerator(bottom, top).moire_components(5, 2)
+    np.testing.assert_allclose([c.q for c in actual], [c.q for c in expected])
+    assert [c.multiplicity for c in actual] == [c.multiplicity for c in expected]
+
+
 def test_graphene_mos2_scan():
     import ase.io
     bottom = ase.io.read(Path(__file__).parent / 'graphene.xsf')

@@ -64,6 +64,17 @@ def main():
     else:
         angles = np.arange(args.alist[0], args.alist[1], args.alist[2])
 
+    if args.max_order is not None:
+        if args.max_order < 1:
+            parser.error('--max-order must be at least 1')
+        for ang in angles:
+            print(f"Moiré components at {ang:g}° (period in Å, q in Å⁻¹; no Fourier amplitudes)")
+            print('order  n  m  q  period  angle (deg)  multiplicity')
+            for c in twistSupercell.moire_components(ang, args.max_order):
+                print(f'{c.order:.8g}  {c.n}  {c.m}  '
+                      f'({c.q[0]:.8g}, {c.q[1]:.8g})  {c.period:.8g}  '
+                      f'{c.angle_deg:.8g}  {c.multiplicity}')
+
     entries = twistSupercell.scan(angles, args.z, args.d, args.tolerance)
     if not entries:
         raise SystemExit('[err] No structure within the strain tolerance')

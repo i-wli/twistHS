@@ -1,10 +1,15 @@
 """Two-dimensional moiré geometry with lattice vectors stored as rows.
 
 The aligned-basis special case is Hermann, J. Phys.: Condens. Matter 24,
-314210 (2012), doi:10.1088/0953-8984/24/31/314210.
+314210 (2012), doi:10.1088/0953-8984/24/31/314210. Higher-index reciprocal
+components follow the construction discussed by Pham et al., npj 2D Mater.
+Appl. 6, 48 (2022), doi:10.1038/s41699-022-00321-9. No Fourier amplitudes
+or commensurability search are included.
 """
 
+from dataclasses import dataclass, replace
 from itertools import product
+from math import gcd
 
 import numpy as np
 
@@ -122,3 +127,80 @@ def principal_strains(C_layer, C):
     """Return engineering principal strains of the deformation into common C."""
     F = np.linalg.solve(_lattice(C_layer), _lattice(C)).T
     return np.linalg.svd(F, compute_uv=False) - 1
+
+
+@dataclass(frozen=True)
+class MoireComponent:
+    """A representative ± pair; multiplicity counts pairs of equal order/period.
+
+    n and m refer to the original input reciprocal bases, q is Cartesian, and
+    angle_deg is atan2(q_y, q_x) in [0, 360). A zero q has no direction (NaN).
+    """
+
+    order: float
+    n: tuple[int, int]
+    m: tuple[int, int]
+    q: np.ndarray
+    period: float
+    angle_deg: float
+    multiplicity: int = 1
+
+
+def moire_components(A_b, A_t, max_order):
+    """Analyze primitive nearest-pair components within reciprocal length cutoffs.
+
+    Each layer's cutoff is max_order times its shortest reciprocal length.
+    Harmonics and ± duplicates are removed. Equal-order, equal-period pairs
+    are grouped with their multiplicity; this does not predict intensity.
+    """
+    if not np.isfinite(max_order) or max_order < 1:
+        raise ValueError("max_order must be finite and at least 1")
+    B_b, U_b = reduce_basis(reciprocal_2d(A_b))
+    B_t, U_t = reduce_basis(reciprocal_2d(A_t))
+    b_min, t_min = np.linalg.norm(B_b[0]), np.linalg.norm(B_t[0])
+    cutoff = max_order * b_min
+    radius = int(np.ceil(cutoff / np.linalg.svd(B_b, compute_uv=False)[-1]))
+    components = []
+    for index in product(range(-radius, radius + 1), repeat=2):
+        n = np.array(index)
+        if not np.any(n):
+            continue
+        G_b = n @ B_b
+        # Choose one of ±G by its Cartesian direction, independent of basis.
+        if G_b[0] < -1e-12 * b_min or (abs(G_b[0]) <= 1e-12 * b_min and G_b[1] < 0):
+            continue
+        if np.linalg.norm(G_b) > cutoff * (1 + 1e-10):
+            continue
+        m = nearest_lattice_vector(G_b, B_t)
+        if not np.any(m):
+            continue
+        G_t = m @ B_t
+        if np.linalg.norm(G_t) > max_order * t_min * (1 + 1e-10):
+            continue
+        if gcd(*map(int, np.concatenate((n, m)))) > 1:
+            continue
+        q = G_b - G_t
+        q_length = np.linalg.norm(q)
+        zero = q_length <= 1e-12 * max(b_min, t_min)
+        component = MoireComponent(
+            order=float(max(np.linalg.norm(G_b) / b_min, np.linalg.norm(G_t) / t_min)),
+            n=tuple(map(int, n @ U_b)),
+            m=tuple(map(int, m @ U_t)),
+            q=q,
+            period=float('inf') if zero else float(2 * np.pi / q_length),
+            angle_deg=float('nan') if zero else float(np.degrees(np.arctan2(q[1], q[0])) % 360),
+        )
+        components.append(component)
+
+    components.sort(key=lambda c: (round(c.order, 10), -c.period, c.angle_deg))
+    grouped = []
+    for component in components:
+        for i, existing in enumerate(grouped):
+            if (np.isclose(component.order, existing.order, rtol=1e-10, atol=0)
+                    and np.isclose(component.period, existing.period, rtol=1e-10, atol=0)):
+                representative = component if component.angle_deg < existing.angle_deg else existing
+                grouped[i] = replace(representative, multiplicity=existing.multiplicity + 1)
+                break
+        else:
+            grouped.append(component)
+    return grouped

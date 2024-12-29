@@ -4,7 +4,7 @@ import numpy as np
 import ase.io
 from typing import Tuple
 from twistHS.lib.func import *
-from twistHS.lib.moire import principal_strains, supercell_matrices
+from twistHS.lib.moire import moire_components, principal_strains, supercell_matrices
 
 class HSGenerator:
     """Generates twisted vdW heterostructure supercells."""
@@ -75,6 +75,11 @@ class HSGenerator:
                 results.append((angle, structure, strain))
         return results
 
+    def moire_components(self, theta, max_order):
+        """Analyze reciprocal components without constructing an atomic cell."""
+        top_rot = self.top.copy()
+        top_rot.rotate(theta, 'z', rotate_cell=True)
+        return moire_components(self.bottom.cell[:2, :2], top_rot.cell[:2, :2], max_order)
 
 
 def get_parser():
@@ -84,6 +89,7 @@ def get_parser():
     parser.add_argument('-a','--angle', help='Multi twist angle',nargs='+', type=float)
     parser.add_argument('-al','--alist', help='start end step',nargs='+', type=float)
     parser.add_argument('-tol','--tolerance', help='max principal strain of either layer (%%), default = 1%%', type=float, default = 1.0)
+    parser.add_argument('-mo', '--max-order', type=int, help='reciprocal length cutoff for higher-order analysis (integer >= 1)')
     parser.add_argument('-z', help='superlattice constant along z direction, default = 30 A', type=float, default = 30.0)
     parser.add_argument('-d', help='distance of two layers, default = 7 A', type=float, default = 7.0)
     parser.add_argument('-w','--write', help='Path to write supercell, need to be recognized by ASE')

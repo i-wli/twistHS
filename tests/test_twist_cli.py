@@ -131,5 +131,20 @@ def test_main_no_structure_within_tolerance(monkeypatch):
         main()
 
 
+def test_main_component_table_and_commensurate_cells(monkeypatch, capsys):
+    from twistHS.twist_cli import main
+    root = Path(__file__).parent
+    monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', str(root / 'graphene.xsf'),
+                        '-t', str(root / 'graphene.xsf'), '-a', '21.7868', '38.2132', '-mo', '2'])
+    with patch('twistHS.twist_cli.StructureVisualizer') as visualizer, patch('matplotlib.pyplot.show'):
+        main()
+    angles, _, _, _, results = visualizer.call_args.args
+    np.testing.assert_array_equal(angles, [21.7868, 38.2132])
+    assert [len(result) for result, _ in results] == [28, 28]
+    table = capsys.readouterr().out
+    assert table.count('Moiré components at') == 2
+    assert 'multiplicity' in table
+    assert 'q  period  angle (deg)' in table
+
 if __name__ == '__main__':
     pytest.main(['-v'])

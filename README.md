@@ -21,6 +21,19 @@ single-vector mismatch measure. This rounding procedure does not search for a
 minimum-area or minimum-strain commensurate supercell. Singular moiré geometry,
 non-unimodular first-order pairing, and singular rounded cells raise errors.
 
+`-mo K` / `--max-order K` additionally prints higher-index reciprocal components
+for every requested angle. Each nonzero bottom vector is paired with its nearest
+top vector; pairs with a zero top vector are discarded. Both vectors must lie
+within `K` times their layer's shortest reciprocal length. Harmonics and ±
+duplicates are removed. The table reports
+input-basis indices, Cartesian `q = G_b - G_t`, `2π/|q|`, direction, geometric
+order (1, √3, …), and multiplicity of equal-order, equal-period ± pairs. Zero `q`
+has infinite period and undefined direction (`nan`). This analysis follows the
+higher-index construction discussed by
+[Pham et al. (2022)](https://doi.org/10.1038/s41699-022-00321-9); it computes no
+Fourier amplitudes and generates no additional atomic structures. Multilayer
+and supermoiré analysis are not included.
+
 ## Features
 
 - CLI Tool (`twist_cli.py`): generate structures through your terminal or command prompt.
@@ -54,6 +67,11 @@ pip install .
 Open your command-line interface and run:
 ```
 twist_cli [options]
+```
+For example, analyze reciprocal components through order 2 and visualize the
+structures that pass a 0.5% strain tolerance:
+```
+twist_cli -b tests/graphene.xsf -t tests/MoS2.xsf -al 0 10 1 -tol 0.5 -mo 2
 ```
 This should open a matplotlib interface:
 ![image](https://github.com/i-wli/twistHS/blob/main/docs/cli.gif)
