@@ -2,9 +2,6 @@ import os
 import sys
 from pathlib import Path
 
-project_root = Path(__file__).parent.parent
-sys.path.append(str(project_root))
-
 import pytest
 import numpy as np
 import tempfile
@@ -129,6 +126,16 @@ def test_main_no_structure_within_tolerance(monkeypatch):
                         '-t', str(root / 'MoS2.xsf'), '-a', '0', '-tol', '0'])
     with pytest.raises(SystemExit, match='No structure within the strain tolerance'):
         main()
+
+
+def test_main_requires_angles(monkeypatch, capsys):
+    from twistHS.twist_cli import main
+
+    monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', 'bottom.xsf', '-t', 'top.xsf'])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
+    assert 'specify at least one of -a/--angle or -al/--alist' in capsys.readouterr().err
 
 
 def test_main_component_table_and_commensurate_cells(monkeypatch, capsys):

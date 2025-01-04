@@ -1,6 +1,4 @@
-import sys
 import numpy as np
-import ase.io
 from ase.atoms import Atoms
 from dataclasses import dataclass
 

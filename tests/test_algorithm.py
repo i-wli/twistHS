@@ -1,15 +1,9 @@
-import os
-import sys
 from pathlib import Path
-
-project_root = Path(__file__).parent.parent
-sys.path.append(str(project_root))
 
 import pytest
 import numpy as np
 from ase import Atoms
-from ase.build import bulk
-from twistHS.lib.algorithm import HSGenerator, check_vectors
+from twistHS.lib.algorithm import HSGenerator
 
 @pytest.fixture
 def test_structures():

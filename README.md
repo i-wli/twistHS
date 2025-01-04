@@ -42,22 +42,34 @@ and supermoiré analysis are not included.
 
 ## Installation
 
-1. **Set Up Environment**:
-It is recommended to create a new Conda environment for running this project to avoid any conflicts with existing packages. You can create a new environment with Python 3.12 as follows:
-```
-conda create --name moire_env python=3.12 pip
-conda activate moire_env
-```
-2. **Install the Package Directly from GitHub**:
-```
-pip install git+https://github.com/i-wli/twistHS.git
-```
+Use Python 3.12 or newer. To install the CLI and Python package from source:
 
-2.1 **Development Installation with source code**:
-```
+```sh
 git clone https://github.com/i-wli/twistHS.git
 cd twistHS
-pip install .
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install .
+```
+
+Install `".[gui]"` to add the Gradio interface.
+
+For local development and verification:
+
+```sh
+python -m pip install -e ".[test,gui]"
+python -m pip install ruff
+pytest
+ruff check
+```
+
+To build and publish a release manually from a clean checkout:
+
+```sh
+python -m pip install build twine
+python -m build
+python -m twine check dist/*
+python -m twine upload dist/*
 ```
 
 ## Usage

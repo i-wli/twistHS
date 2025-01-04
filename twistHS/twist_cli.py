@@ -2,7 +2,6 @@ import numpy as np
 import ase.io
 from ase.visualize.plot import plot_atoms
 import matplotlib.pyplot as plt
-from matplotlib.backend_bases import MouseButton
 from matplotlib.collections import PathCollection
 from matplotlib.widgets import Button
 
@@ -54,6 +53,8 @@ class StructureVisualizer:
 def main():
     parser = get_parser()
     args = parser.parse_args()
+    if args.angle is None and args.alist is None:
+        parser.error('specify at least one of -a/--angle or -al/--alist')
     bottom = ase.io.read(args.bottom)
     top = ase.io.read(args.top)
 

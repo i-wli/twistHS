@@ -1,9 +1,17 @@
 import argparse
 import logging
 import numpy as np
-import ase.io
+from ase import Atoms
 from typing import Tuple
-from twistHS.lib.func import *
+from twistHS.lib.func import (
+    Pyatoms,
+    check_vectors,
+    coord_cart2frac,
+    coord_frac2cart,
+    get_supercell_atoms_pos,
+    get_supercell_vecs,
+    py_atoms_to_ase_atoms,
+)
 from twistHS.lib.moire import moire_components, principal_strains, supercell_matrices
 
 class HSGenerator:

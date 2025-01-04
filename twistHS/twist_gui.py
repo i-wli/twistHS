@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import gradio as gr
 from ase.visualize.plot import plot_atoms
 
-from twistHS.lib.algorithm import get_parser, HSGenerator
+from twistHS.lib.algorithm import HSGenerator
 
 class StructureVisualizer:
     def __init__(self, bottom, top, z, d):
@@ -36,8 +36,7 @@ class StructureVisualizer:
     def generate_detailed_structure(self, selected_angle, angles, results):
         try:
             ind = np.isclose(angles, selected_angle, atol=1e-3).tolist().index(True)
-            result, Delta = results[ind]
-            num = len(result)
+            result, _ = results[ind]
             fig, ax = plt.subplots()
             supercell = result.copy()
             supercell.wrap()
