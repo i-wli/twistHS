@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from twistHS.lib.moire import (
-    moire_components, moire_lattice, nearest_lattice_vector,
+    deformation, moire_components, moire_lattice, nearest_lattice_vector,
     principal_strains, reciprocal_2d, reduce_basis, supercell_matrices,
 )
 
@@ -74,6 +74,18 @@ def test_principal_strains_stretch_rotation_and_basis():
     U = np.array([[1, 4], [0, 1]])
     np.testing.assert_allclose(principal_strains(U @ layer, U @ common), [0.03, -0.02], atol=1e-14)
     np.testing.assert_allclose(principal_strains(layer @ rotation(13), common @ rotation(13)), [0.03, -0.02], atol=1e-14)
+
+
+@pytest.mark.parametrize('theta', [-47, 27])
+def test_deformation_polar_angle(theta):
+    layer = np.array([[2., 0.1], [0.5, 3.]])
+    Q = rotation(17)
+    stretch = Q.T @ np.diag([1.03, 0.98]) @ Q
+    common = layer @ stretch @ rotation(theta)
+    for basis in (np.eye(2), [[0, 1], [1, 5]]):
+        strains, phi = deformation(basis @ layer, basis @ common)
+        np.testing.assert_allclose(strains, [0.03, -0.02], atol=1e-14)
+        assert phi == pytest.approx(theta)
 
 
 def test_first_order_components_period_and_multiplicity():
