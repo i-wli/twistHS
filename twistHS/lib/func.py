@@ -42,9 +42,9 @@ def ase_atoms_to_py_atoms(atoms: Atoms) -> Pyatoms:
 def py_atoms_to_ase_atoms(atoms: Pyatoms) -> Atoms:
     """Convert Pyatoms to ASE Atoms"""
     return Atoms(
-        numbers=atoms.atomic_numbers.tolist(),
-        positions=atoms.positions.tolist(),
-        cell=atoms.vectors.tolist(),
+        numbers=atoms.atomic_numbers,
+        positions=atoms.positions,
+        cell=atoms.vectors,
         pbc=DEFAULT_PBC
     )    
     
@@ -102,11 +102,16 @@ def get_supercell_atoms_pos(supercell_vecs: np.ndarray,
     trans_matrix = np.array([[trans_2D[0,0], trans_2D[0,1], 0],
                                [trans_2D[1,0], trans_2D[1,1], 0],
                                [0, 0, 1]])
-    lattice_points_frac = lattice_points_in_supercell(trans_matrix)
-    lattice_points = lattice_points_frac @ supercell_vecs
-    superatoms = Atoms(cell=supercell_vecs, pbc=unit.pbc)
-    for lp in lattice_points:
-        shifted_atoms = unit.copy()
-        shifted_atoms.positions += lp
-        superatoms.extend(shifted_atoms)
+    lattice_points = lattice_points_in_supercell(trans_matrix) @ supercell_vecs
+    positions = (lattice_points[:, None, :] + unit.positions[None, :, :]).reshape(-1, 3)
+    superatoms = Atoms(
+        numbers=np.tile(unit.numbers, len(lattice_points)),
+        positions=positions,
+        cell=supercell_vecs,
+        pbc=unit.pbc,
+    )
+    for name, values in unit.arrays.items():
+        if name not in superatoms.arrays:
+            repeats = (len(lattice_points),) + (1,) * (values.ndim - 1)
+            superatoms.new_array(name, np.tile(values, repeats))
     return superatoms

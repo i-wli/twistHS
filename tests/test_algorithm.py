@@ -2,8 +2,10 @@ from pathlib import Path
 
 import pytest
 import numpy as np
+import ase.io
 from ase import Atoms
 from twistHS.lib.algorithm import HSGenerator
+from twistHS.lib.func import Pyatoms, get_supercell_atoms_pos, lattice_points_in_supercell
 
 @pytest.fixture
 def test_structures():
@@ -40,6 +42,52 @@ def test_gen_supercell_basic(test_structures):
     assert delta >= 0
     assert len(result) == 524
     assert result.cell[2][2] == pytest.approx(super_z, rel=1e-5)
+
+
+@pytest.mark.parametrize('materials', ['graphene/hBN', 'graphene/MoS2'])
+def test_gen_supercell_matches_legacy_atom_set(test_structures, materials, monkeypatch):
+    if materials == 'graphene/hBN':
+        bottom, top = test_structures
+    else:
+        root = Path(__file__).parent
+        bottom = ase.io.read(root / 'graphene.xsf')
+        top = ase.io.read(root / 'MoS2.xsf')
+    generator = HSGenerator(bottom, top)
+    actual, _ = generator.gen_supercell(5, 30, 7)
+
+    def legacy_coincidence(self, common, cell, transform, unit):
+        matrix = np.eye(3, dtype=int)
+        matrix[:2, :2] = transform
+        points = lattice_points_in_supercell(matrix) @ cell
+        structure = Atoms(cell=cell, pbc=unit.pbc)
+        for point in points:
+            shifted = unit.copy()
+            shifted.positions += point
+            structure.extend(shifted)
+        positions = (structure.positions @ np.linalg.inv(cell)) @ common
+        return Pyatoms(common, positions, structure.numbers)
+
+    monkeypatch.setattr(HSGenerator, '_coincidence', legacy_coincidence)
+    expected, _ = generator.gen_supercell(5, 30, 7)
+
+    def sorted_atoms(structure):
+        atoms = np.column_stack((structure.numbers, structure.positions))
+        return atoms[np.lexsort(atoms.round(9).T[::-1])]
+
+    np.testing.assert_allclose(sorted_atoms(actual), sorted_atoms(expected), rtol=0, atol=1e-10)
+
+
+def test_supercell_builder_tiles_per_atom_arrays():
+    unit = Atoms('BN', positions=[[0, 0, 0], [1, 1, 0]], cell=[3, 4, 15],
+                 pbc=[True, True, False], tags=[2, 3])
+    unit.new_array('vectors', np.arange(12).reshape(2, 2, 3))
+    result = get_supercell_atoms_pos(np.diag([6, 4, 15]), np.diag([2, 1]), unit)
+    np.testing.assert_array_equal(result.numbers, np.tile(unit.numbers, 2))
+    np.testing.assert_array_equal(result.positions, [[0, 0, 0], [1, 1, 0], [3, 0, 0], [4, 1, 0]])
+    np.testing.assert_array_equal(result.pbc, unit.pbc)
+    np.testing.assert_array_equal(result.get_tags(), [2, 3, 2, 3])
+    np.testing.assert_array_equal(result.arrays['vectors'], np.tile(unit.arrays['vectors'], (2, 1, 1)))
+
 
 def test_gen_supercell_layer_separation(test_structures):
     """Test if layers are properly separated by delta_z"""
@@ -176,7 +224,6 @@ def test_components_use_rotated_top_without_supercell(test_structures):
 
 
 def test_graphene_mos2_scan():
-    import ase.io
     bottom = ase.io.read(Path(__file__).parent / 'graphene.xsf')
     top = ase.io.read(Path(__file__).parent / 'MoS2.xsf')
     results = HSGenerator(bottom, top).scan(np.arange(10), 30, 7, 0.5)

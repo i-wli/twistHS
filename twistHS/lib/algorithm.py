@@ -6,8 +6,6 @@ from typing import Tuple
 from twistHS.lib.func import (
     Pyatoms,
     check_vectors,
-    coord_cart2frac,
-    coord_frac2cart,
     get_supercell_atoms_pos,
     get_supercell_vecs,
     py_atoms_to_ase_atoms,
@@ -35,8 +33,8 @@ class HSGenerator:
                     trans_2D: np.ndarray, 
                     unit: Atoms) -> Pyatoms:
         superatoms = get_supercell_atoms_pos(vectors_indiv, trans_2D, unit)
-        superatoms_frac = coord_cart2frac(vectors_indiv, superatoms.positions)
-        superatoms_pos = coord_frac2cart(vectors_super, superatoms_frac)
+        deformation = np.linalg.solve(vectors_indiv, vectors_super)
+        superatoms_pos = superatoms.positions @ deformation
         return Pyatoms(vectors_super, superatoms_pos, superatoms.numbers)
 
     def gen_supercell(self, theta: float, super_z: float, delta_z: float) -> Tuple[Atoms, float]:

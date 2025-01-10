@@ -98,3 +98,14 @@ twist_gui
 
 Once the GUI is open, you should see:
 ![image](https://github.com/i-wli/twistHS/blob/main/docs/gui.gif)
+
+## Supercell construction benchmark
+
+On an Apple M1 with 8 GB of RAM, vectorized atom placement cut the median
+time to build both layers of a 1,316,056-atom twisted graphene supercell
+from 614.75 s to 0.1545 s. Median peak process memory fell
+from 499.0 MiB to 377.6 MiB.
+The [benchmark report](docs/benchmarks.md) covers the 5° to 0.1° sweep and
+provides the raw measurements and reproduction commands.
+
+![Build time and peak process memory by atom count](docs/benchmark-build.png)
