@@ -1,3 +1,6 @@
+from decimal import Decimal
+from math import ceil
+
 import numpy as np
 import ase.io
 import matplotlib.pyplot as plt
@@ -14,33 +17,36 @@ class StructureVisualizer:
         self.d = d
 
     def generate_initial_plot(self, angle_start, angle_end, angle_step, tolerance):
-        angles = np.arange(angle_start, angle_end, angle_step)
+        start, end, step = (Decimal(str(value)) for value in (angle_start, angle_end, angle_step))
+        angles = [float(start + i * step) for i in range(ceil((end - start) / step))]
         twistSupercell = HSGenerator(self.bottom, self.top)
         entries = twistSupercell.scan(angles, self.z, self.d, tolerance)
         if not entries:
             return None, None, None
 
         valid_angles = np.array([angle for angle, _, _ in entries])
+        effective_angles = np.array([result.info["theta_eff"] for _, result, _ in entries])
         nums = np.array([len(result) for _, result, _ in entries])
         Deltas = np.array([strain for _, _, strain in entries]) * 100
         results = [(result, strain) for _, result, strain in entries]
         fig, ax = plt.subplots()
-        scatter = ax.scatter(valid_angles, nums, c=Deltas, picker=True)
+        scatter = ax.scatter(effective_angles, nums, c=Deltas, picker=True)
         plt.colorbar(scatter, label='Max strain (%)')
-        plt.xlabel(r'Twist Angle ($^{\circ}$)')
+        ax.set_xlabel(r'Effective Twist Angle ($^{\circ}$)')
         plt.ylabel('Number of Atoms')
-        plt.title('Num vs Angle')
+        ax.set_title('Atom Count vs Effective Angle')
         plt.close()
         return fig, valid_angles, results
 
     def generate_detailed_structure(self, selected_angle, angles, results):
         try:
-            ind = np.isclose(angles, selected_angle, atol=1e-3).tolist().index(True)
+            ind = angles.tolist().index(selected_angle)
             result, _ = results[ind]
             fig, ax = plt.subplots()
             supercell = result.copy()
             supercell.wrap()
             plot_atoms(supercell, ax, scale=2, radii=0.25, rotation=('0x,0y,0z'))
+            ax.set_title(f'Effective angle {result.info["theta_eff"]:.4f}°')
             ax.set_axis_off()
             plt.close()
             return fig
@@ -49,7 +55,7 @@ class StructureVisualizer:
     
     def save_structure(self, selected_angle, angles, results, filename):
         try:
-            ind = np.isclose(angles, selected_angle, atol=1e-3).tolist().index(True)
+            ind = angles.tolist().index(selected_angle)
             result, _ = results[ind]
             if not filename:
                 filename = f"structure_{selected_angle:.2f}.xsf"
@@ -76,7 +82,7 @@ def main_interface(bottom_file, top_file, angle_start, angle_end, angle_step, z,
             elif not isinstance(detailed_plot, plt.Figure):
                 return detailed_plot, initial_plot, None, None
         else:
-            return "Select an angle to view the detailed structure.", initial_plot, None, None
+            return "Enter a requested angle to view the detailed structure.", initial_plot, None, None
             
         
         if saved_file_path:
@@ -99,7 +105,7 @@ def main():
     gr.Number(label="z, superlattice constant along z direction"),
     gr.Number(label="d, distance of two layers"),
     gr.Number(label="Max principal strain of either layer (%)"),
-    gr.Number(label="Selected one angle for visualization (Optional)"),
+    gr.Number(label="Requested angle for visualization (optional)"),
     gr.Checkbox(label="Save Structure", value=False),
     gr.Textbox(label="Filename to save structure, default=structure_angle.xsf")
     ],

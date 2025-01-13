@@ -1,25 +1,30 @@
 # Twisted Heterostructure Generation Toolkit
 A Python-based solution for generating twisted heterostructures through both a Command-Line Interface (CLI) and a Graphical User Interface (GUI). Whether you are a researcher, student, or hobbyist interested in the fascinating world of moiré patterns, this toolkit is designed to provide a flexible and user-friendly approach to exploring these patterns.
 
-First-order moiré geometry uses arbitrary nonsingular 2D lattice matrices with
-basis vectors stored as rows. The top lattice includes the requested rotation.
-The bottom basis is Gauss-reduced, and each bottom reciprocal vector is paired
-with its nearest top reciprocal vector. A one-to-one (unimodular) pairing is
-required. For the aligned real-space bases, the moiré lattice is
-`A_M = (A_b^-1 - A_t^-1)^-1`, with reciprocal bases `B = 2π A^-T`.
-This includes the aligned special case of
-[Hermann (2012)](https://doi.org/10.1088/0953-8984/24/31/314210), and supports
-different lattice angles and equivalent primitive bases.
+The default coincidence search runs. It enumerates bottom sublattices in Hermite normal form and
+matches their basis vectors to the rotated top lattice. For each requested
+angle, it returns the cell with the fewest atoms that satisfies all three
+limits. Ties are resolved by maximum strain, effective angle deviation, and
+the integer matrices.
 
-Atomic structures are approximants obtained by rounding transformation matrices
-in the aligned working bases and averaging the resulting layer cells to a common
-cell `C`. For each layer, `F = (C_layer^-1 C)^T`; its principal strains are
-`svd(F) - 1`. The reported `Delta` is the maximum absolute principal strain over
-both layers. CLI and GUI retain only structures with `Delta*100 <= tolerance`.
-`--tolerance` is therefore a strain percentage, and differs from the former
-single-vector mismatch measure. This rounding procedure does not search for a
-minimum-area or minimum-strain commensurate supercell. Singular moiré geometry,
-non-unimodular first-order pairing, and singular rounded cells raise errors.
+- `--tolerance` limits the maximum absolute principal strain across both
+  layers. The default is 1%.
+- `--angle-tol` limits the difference between requested and effective twist.
+  The default is 0.1°.
+- `--max-atoms` limits the total number of atoms. The default is 12,000.
+
+Both layers deform into their average cell `C`. The right polar decomposition
+of `F = (C_layer^-1 C)^T` gives a rotation `phi` and a stretch whose principal
+values minus one give the engineering strains. The effective twist is
+`theta_eff = theta + phi_top - phi_bottom`. Both interfaces plot this angle.
+
+`--method first-order` reproduces the v1 rounding approach for aligned
+primitive bases. It pairs the reduced bottom reciprocal vectors with their
+nearest top reciprocal vectors and requires a unimodular pairing. The
+real-space moiré cell is `A_M = (A_b^-1 - A_t^-1)^-1` in the aligned bases.
+This mode applies only the strain filter when scanning angles. Singular
+moiré geometry, invalid pairing, and singular rounded cells raise errors.
+[Hermann (2012)](https://doi.org/10.1088/0953-8984/24/31/314210)
 
 `-mo K` / `--max-order K` additionally prints higher-index reciprocal components
 for every requested angle. Each nonzero bottom vector is paired with its nearest
@@ -98,6 +103,27 @@ twist_gui
 
 Once the GUI is open, you should see:
 ![image](https://github.com/i-wli/twistHS/blob/main/docs/gui.gif)
+
+The GUI uses the requested angle to select or save an individual structure.
+In the CLI, click a point to open its structure and save it with the default
+XSF filename or a path supplied through `-w`.
+
+**Python API**
+
+```python
+from ase.io import read
+from twistHS.lib.algorithm import HSGenerator
+
+generator = HSGenerator(read("tests/graphene.xsf"), read("tests/MoS2.xsf"),
+                        tolerance=1.0, angle_tol=0.1, max_atoms=12_000)
+atoms, strain, theta_eff = generator.gen_supercell(5, super_z=30, delta_z=7)
+for requested_angle, atoms, strain in generator.scan([4, 5, 6], super_z=30, delta_z=7):
+    print(requested_angle, atoms.info["theta_eff"], len(atoms), 100 * strain)
+```
+
+`gen_supercell` returns strain as a fraction and raises `ValueError` if search
+finds no matching cell. `scan` omits requested angles with no match. Its optional
+`tolerance` argument overrides the generator's strain limit in percent.
 
 ## Supercell construction benchmark
 

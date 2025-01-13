@@ -3,8 +3,7 @@
 The aligned-basis special case is Hermann, J. Phys.: Condens. Matter 24,
 314210 (2012), doi:10.1088/0953-8984/24/31/314210. Higher-index reciprocal
 components follow the construction discussed by Pham et al., npj 2D Mater.
-Appl. 6, 48 (2022), doi:10.1038/s41699-022-00321-9. No Fourier amplitudes
-or commensurability search are included.
+Appl. 6, 48 (2022), doi:10.1038/s41699-022-00321-9.
 """
 
 from dataclasses import dataclass, replace

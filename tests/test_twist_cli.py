@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import matplotlib.pyplot as plt
 import numpy as np
 import tempfile
 from unittest.mock import Mock, patch
@@ -44,6 +45,8 @@ def handler(test_structures, mock_args):
     angles = [0.0, 1.0, 2.0]
     Delta = 0.01
     results = [(bottom.copy(), Delta) for _ in range(3)]
+    for angle, (structure, _) in zip(angles, results):
+        structure.info["theta_eff"] = angle
     return StructureVisualizer(angles, bottom, top, mock_args, results)
 
 def test_initialization(handler):
@@ -110,21 +113,25 @@ def test_main_filters_angles_and_results(monkeypatch):
     from twistHS.twist_cli import main
     root = Path(__file__).parent
     monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', str(root / 'graphene.xsf'),
-                        '-t', str(root / 'MoS2.xsf'), '-al', '0', '10', '1', '-tol', '0.5'])
-    with patch('twistHS.twist_cli.StructureVisualizer') as visualizer, patch('matplotlib.pyplot.show'):
+                        '-t', str(root / 'graphene.xsf'), '-a', '0.05', '5', '-tol', '0.5',
+                        '--angle-tol', '0.1', '--max-atoms', '4'])
+    with (patch('twistHS.twist_cli.StructureVisualizer') as visualizer,
+          patch('matplotlib.pyplot.show'), patch('matplotlib.pyplot.scatter', wraps=plt.scatter) as scatter):
         main()
     angles, _, _, _, results = visualizer.call_args.args
-    np.testing.assert_array_equal(angles, np.arange(2, 9))
-    assert len(results) == len(angles)
-    assert all(strain * 100 <= 0.5 for _, strain in results)
+    np.testing.assert_array_equal(angles, [0.05])
+    assert len(results) == 1
+    assert len(results[0][0]) == 4
+    assert results[0][1] * 100 <= 0.5
+    np.testing.assert_allclose(scatter.call_args.args[0], [0], atol=1e-12)
 
 
 def test_main_no_structure_within_tolerance(monkeypatch):
     from twistHS.twist_cli import main
     root = Path(__file__).parent
     monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', str(root / 'graphene.xsf'),
-                        '-t', str(root / 'MoS2.xsf'), '-a', '0', '-tol', '0'])
-    with pytest.raises(SystemExit, match='No structure within the strain tolerance'):
+                        '-t', str(root / 'MoS2.xsf'), '-a', '0', '-tol', '0', '--max-atoms', '5'])
+    with pytest.raises(SystemExit, match='No structure within the configured limits'):
         main()
 
 
@@ -152,6 +159,7 @@ def test_main_component_table_and_commensurate_cells(monkeypatch, capsys):
     assert table.count('Moiré components at') == 2
     assert 'multiplicity' in table
     assert 'q  period  angle (deg)' in table
+
 
 if __name__ == '__main__':
     pytest.main(['-v'])

@@ -24,12 +24,13 @@ class StructureVisualizer:
             ind = event.ind[0]
             self.ang = self.angles[ind]
             self.current_result, self.Delta = self.results[ind]
+            theta_eff = self.current_result.info["theta_eff"]
             self.num = len(self.current_result)
             fig, ax = plt.subplots()
             supercell = self.current_result.copy()
             supercell.wrap()
             plot_atoms(supercell, ax, scale=2, radii=0.3, rotation=('0x,0y,0z'))
-            plt.title(f"Angle: {self.ang:.2f}, Num: {self.num}, Max strain: {self.Delta*100:.2f}%")
+            plt.title(f"Effective angle: {theta_eff:.4f}°, Num: {self.num}, Max strain: {self.Delta*100:.2f}%")
             ax.set_axis_off()
             axsave = plt.axes([0.81, 0.05, 0.1, 0.075])
             btn_save = Button(axsave, 'Save')
@@ -58,7 +59,8 @@ def main():
     bottom = ase.io.read(args.bottom)
     top = ase.io.read(args.top)
 
-    twistSupercell = HSGenerator(bottom, top)
+    twistSupercell = HSGenerator(bottom, top, method=args.method, tolerance=args.tolerance,
+                                angle_tol=args.angle_tol, max_atoms=args.max_atoms)
 
     if args.alist is None:
         angles = args.angle
@@ -76,16 +78,17 @@ def main():
                       f'({c.q[0]:.8g}, {c.q[1]:.8g})  {c.period:.8g}  '
                       f'{c.angle_deg:.8g}  {c.multiplicity}')
 
-    entries = twistSupercell.scan(angles, args.z, args.d, args.tolerance)
+    entries = twistSupercell.scan(angles, args.z, args.d)
     if not entries:
-        raise SystemExit('[err] No structure within the strain tolerance')
+        raise SystemExit('[err] No structure within the configured limits')
     angles = np.array([angle for angle, _, _ in entries])
+    effective_angles = np.array([result.info["theta_eff"] for _, result, _ in entries])
     nums = np.array([len(result) for _, result, _ in entries])
     Deltas = np.array([strain for _, _, strain in entries]) * 100
     results = [(result, strain) for _, result, strain in entries]
-    scatter = plt.scatter(angles, nums, c=Deltas, picker=True)
+    scatter = plt.scatter(effective_angles, nums, c=Deltas, picker=True)
     plt.colorbar(scatter, label='Max strain (%)')
-    plt.xlabel(r'Twist Angle ($^{\circ}$)')
+    plt.xlabel(r'Effective Twist Angle ($^{\circ}$)')
     plt.ylabel('Number of Atoms')
     plt.title('Click one point to see the structure.')
 
