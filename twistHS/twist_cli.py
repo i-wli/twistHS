@@ -40,7 +40,8 @@ class StructureVisualizer:
     def save_structure(self, event):
         if self.current_result is not None:
             filename = self.get_filename()
-            self.current_result.write(filename)
+            outformat = self.args.outformat if self.args.write is not None else None
+            self.current_result.write(filename, format=outformat)
             print(f"Structure saved as {filename}")
         else:
             print("No structure to save")

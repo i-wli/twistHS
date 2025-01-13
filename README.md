@@ -106,7 +106,8 @@ Once the GUI is open, you should see:
 
 The GUI uses the requested angle to select or save an individual structure.
 In the CLI, click a point to open its structure and save it with the default
-XSF filename or a path supplied through `-w`.
+XSF filename or a path supplied through `-w`. Use `-o` to specify the format
+for that path.
 
 **Python API**
 

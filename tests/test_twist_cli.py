@@ -15,6 +15,7 @@ def mock_args():
     """Create mock arguments"""
     args = Mock()
     args.write = None
+    args.outformat = None
     args.z = 30.0
     args.d = 7.0
     return args
@@ -160,6 +161,14 @@ def test_main_component_table_and_commensurate_cells(monkeypatch, capsys):
     assert 'multiplicity' in table
     assert 'q  period  angle (deg)' in table
 
+
+def test_save_respects_explicit_format(handler, tmp_path):
+    destination = tmp_path / 'structure.data'
+    handler.args.write = str(destination)
+    handler.args.outformat = 'xyz'
+    handler.current_result = handler.results[0][0]
+    handler.save_structure(None)
+    assert destination.read_text().splitlines()[0] == '2'
 
 if __name__ == '__main__':
     pytest.main(['-v'])
