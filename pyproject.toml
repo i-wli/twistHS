@@ -13,7 +13,7 @@ authors = [{name = "Wei Li"}]
 dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
-    "ase>=3.22.1",
+    "ase>=3.24.0",
     "matplotlib>=3.7",
 ]
 
