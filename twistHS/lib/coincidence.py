@@ -1,5 +1,6 @@
 """Bounded search for pairs of two-dimensional coincidence sublattices."""
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from itertools import islice
 from math import isqrt
@@ -14,6 +15,7 @@ _BOUND_SLACK = 1e-12  # Expand prefilters for roundoff without relaxing the fina
 DEFAULT_TOLERANCE = 1.0
 DEFAULT_ANGLE_TOL = 0.1
 DEFAULT_MAX_ATOMS = 12000
+SEARCH_BACKENDS = ("numpy", "jax")
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,11 @@ def validate_search_limits(angle_tol, max_atoms):
         raise ValueError("angle_tol must be in [0, 180] degrees")
     if isinstance(max_atoms, bool) or not isinstance(max_atoms, (int, np.integer)) or max_atoms < 1:
         raise ValueError("max_atoms must be a positive integer")
+
+
+def validate_search_backend(backend):
+    if backend not in SEARCH_BACKENDS:
+        raise ValueError("backend must be 'numpy' or 'jax'")
 
 
 def _det(matrix):
@@ -72,51 +79,59 @@ def _positive_basis(lattice):
     return basis, transform
 
 
-def _reduce_supercells(matrices, lattice):
+def _numpy_while_loop(condition, step, state):
+    while condition(state):
+        state = step(state)
+    return state
+
+
+def _reduce_supercells(matrices, lattice, xp, while_loop):
     """Reduce the candidate rows together, retaining their integer coefficients."""
-    lengths_sq = np.sum((matrices @ lattice)**2, axis=-1)
+    lengths_sq = xp.sum((matrices @ lattice)**2, axis=-1)
     swap = lengths_sq[:, 1] < lengths_sq[:, 0] * (1 - 1e-14)
-    swapped = np.stack((matrices[:, 1], -matrices[:, 0]), axis=1)
-    matrices = np.where(swap[:, None, None], swapped, matrices)
+    swapped = xp.stack((matrices[:, 1], -matrices[:, 0]), axis=1)
+    matrices = xp.where(swap[:, None, None], swapped, matrices)
 
-    active = np.ones(len(matrices), dtype=bool)
-    while np.any(active):
-        cells = matrices @ lattice
-        first_sq = np.sum(cells[:, 0]**2, axis=1)
-        projection = np.sum(cells[:, 0] * cells[:, 1], axis=1) / first_sq
-        shift = np.where(active, np.rint(projection), 0)
-        second = matrices[:, 1] - shift.astype(matrices.dtype)[:, None] * matrices[:, 0]
+    def step(state):
+        current, active = state
+        cells = current @ lattice
+        first_sq = xp.sum(cells[:, 0]**2, axis=1)
+        projection = xp.sum(cells[:, 0] * cells[:, 1], axis=1) / first_sq
+        shift = xp.where(active, xp.rint(projection), 0)
+        second = current[:, 1] - shift.astype(current.dtype)[:, None] * current[:, 0]
         second_cell = (second[:, None, :] @ lattice)[:, 0]
-        active = active & (np.sum(second_cell**2, axis=1) < first_sq * (1 - 1e-14))
-        reduced = np.stack((matrices[:, 0], second), axis=1)
-        swapped = np.stack((second, -matrices[:, 0]), axis=1)
-        matrices = np.where(active[:, None, None], swapped, reduced)
-    return matrices
+        swap = active & (xp.sum(second_cell**2, axis=1) < first_sq * (1 - 1e-14))
+        reduced = xp.stack((current[:, 0], second), axis=1)
+        swapped = xp.stack((second, -current[:, 0]), axis=1)
+        return xp.where(swap[:, None, None], swapped, reduced), swap
+
+    return while_loop(lambda state: xp.any(state[1]), step,
+                      (matrices, xp.ones(len(matrices), dtype=bool)))[0]
 
 
-def _boxes(matrices, bottom, top_inverse, relative_radius):
-    matrices = _reduce_supercells(matrices, bottom)
+def _boxes(matrices, bottom, top_inverse, relative_radius, *, xp=np, while_loop=_numpy_while_loop):
+    matrices = _reduce_supercells(matrices, bottom, xp, while_loop)
     cells = matrices @ bottom
     center = cells @ top_inverse
-    radii = relative_radius * np.linalg.norm(cells, axis=-1)
-    extent = radii[..., None] * np.linalg.norm(top_inverse, axis=0)
-    low = np.ceil(center - extent).astype(matrices.dtype)
-    high = np.floor(center + extent).astype(matrices.dtype)
+    radii = relative_radius * xp.linalg.norm(cells, axis=-1)
+    extent = radii[..., None] * xp.linalg.norm(top_inverse, axis=0)
+    low = xp.ceil(center - extent).astype(matrices.dtype)
+    high = xp.floor(center + extent).astype(matrices.dtype)
     return matrices, low, high
 
 
-def _disk_mask(cells_b, cells_t, relative_radius):
-    return (np.sum((cells_b - cells_t)**2, axis=-1)
-            <= relative_radius**2 * np.sum(cells_b**2, axis=-1))
+def _disk_mask(cells_b, cells_t, relative_radius, xp=np):
+    return (xp.sum((cells_b - cells_t)**2, axis=-1)
+            <= relative_radius**2 * xp.sum(cells_b**2, axis=-1))
 
 
-def _evaluate(bottom_matrices, top_matrices, bottom, top, relative_radius):
+def _evaluate(bottom_matrices, top_matrices, bottom, top, relative_radius, *, xp=np):
     B, T = bottom_matrices @ bottom, top_matrices @ top
     C = (B + T) / 2
-    strains_b, phi_b = _polar_metrics(B, C)
-    strains_t, phi_t = _polar_metrics(T, C)
-    strain = np.max(np.maximum(np.abs(strains_b), np.abs(strains_t)), axis=-1)
-    feasible = (_det(C) > 0) & np.all(_disk_mask(B, T, relative_radius), axis=-1)
+    strains_b, phi_b = _polar_metrics(B, C, xp)
+    strains_t, phi_t = _polar_metrics(T, C, xp)
+    strain = xp.max(xp.maximum(xp.abs(strains_b), xp.abs(strains_t)), axis=-1)
+    feasible = (_det(C) > 0) & xp.all(_disk_mask(B, T, relative_radius, xp), axis=-1)
     return strain, phi_t - phi_b, feasible
 
 
@@ -131,8 +146,8 @@ def _top_pairs(low, high, top_det_min, top_det_max):
                         yield ((x, y), (u, v))
 
 
-def _matrix_pairs(hnfs, bottom, top_inverse, radius, area_bounds, counts, budget):
-    matrices, low, high = _boxes(hnfs, bottom, top_inverse, radius)
+def _matrix_pairs(hnfs, bottom, top_inverse, radius, area_bounds, counts, budget, boxes):
+    matrices, low, high = boxes(hnfs, bottom, top_inverse, radius)
     possible = np.flatnonzero(np.all(low <= high, axis=(1, 2)))
     for i in possible:
         matrix = matrices[i]
@@ -154,7 +169,8 @@ def _area_bounds(bottom, top, tolerance):
             area_ratio * stretch_ratio**2 * (1 + _BOUND_SLACK))
 
 
-def _matches(first, last, bottom, top, transforms, counts, tolerance, angle_tol, budget):
+def _matches(first, last, bottom, top, transforms, counts, tolerance, angle_tol, budget,
+             *, boxes=_boxes, evaluate=_evaluate):
     """Yield every passing matrix pair for the given bottom determinant interval."""
     area_bounds = _area_bounds(bottom, top, tolerance)
     # T = B (F_t^-1 F_b)^T. The two stretches can differ by at most
@@ -163,10 +179,10 @@ def _matches(first, last, bottom, top, transforms, counts, tolerance, angle_tol,
               + _BOUND_SLACK)
     top_inverse = np.linalg.inv(top)
     for hnfs in _batches(_hnfs(first, last)):
-        pairs = _matrix_pairs(hnfs, bottom, top_inverse, radius, area_bounds, counts, budget)
+        pairs = _matrix_pairs(hnfs, bottom, top_inverse, radius, area_bounds, counts, budget, boxes)
         for batch in _batches(pairs):
             M_b, M_t = batch[:, 0], batch[:, 1]
-            strain, offset, feasible = _evaluate(M_b, M_t, bottom, top, radius)
+            strain, offset, feasible = evaluate(M_b, M_t, bottom, top, radius)
             angle_error = np.abs(offset)
             angle_error = np.minimum(angle_error, 360 - angle_error)
             valid = np.flatnonzero(feasible & (strain <= tolerance) & (angle_error <= angle_tol))
@@ -177,14 +193,16 @@ def _matches(first, last, bottom, top, transforms, counts, tolerance, angle_tol,
 
 
 def find_coincidence(A_b, A_t, counts, *, tolerance=DEFAULT_TOLERANCE,
-                     angle_tol=DEFAULT_ANGLE_TOL, max_atoms=DEFAULT_MAX_ATOMS):
+                     angle_tol=DEFAULT_ANGLE_TOL, max_atoms=DEFAULT_MAX_ATOMS, backend="numpy"):
     """Return the smallest accepted pair of integer transforms, or None.
 
     A_t includes the requested twist. Counts give atoms per primitive cell,
-    tolerance is in percent, and angle_tol is in degrees.
+    tolerance is in percent, and angle_tol is in degrees. Select the optional
+    JAX kernels with backend="jax".
     """
     validate_tolerance(tolerance)
     validate_search_limits(angle_tol, max_atoms)
+    validate_search_backend(backend)
     counts = tuple(map(index, counts))
     if len(counts) != 2 or min(counts) < 1:
         raise ValueError("Both primitive cells must contain atoms")
@@ -193,16 +211,30 @@ def find_coincidence(A_b, A_t, counts, *, tolerance=DEFAULT_TOLERANCE,
     strain = tolerance / 100
     min_ratio, _ = _area_bounds(bottom, top, strain)
 
+    boxes, evaluate, precision = _boxes, _evaluate, nullcontext
+    if backend == "jax":
+        try:
+            from twistHS.lib import _coincidence_jax
+        except ModuleNotFoundError as exc:
+            if exc.name != "jax":
+                raise
+            raise ImportError('The JAX backend requires twistHS[jax]') from exc
+        boxes = _coincidence_jax.boxes
+        evaluate = _coincidence_jax.evaluate
+        precision = _coincidence_jax.enable_x64
+
     best = None
     first, window = 1, 16
-    while True:
-        budget = max_atoms if best is None else best.atom_count
-        last = min(first + window - 1, (budget - counts[1]) // counts[0],
-                   int(budget / (counts[0] + min_ratio * counts[1])))
-        if last < first:
-            return best
-        for match in _matches(first, last, bottom, top, (U_b, U_t), counts, strain, angle_tol, budget):
-            if best is None or match.rank() < best.rank():
-                best = match
-        first = last + 1
-        window *= 2
+    with precision():
+        while True:
+            budget = max_atoms if best is None else best.atom_count
+            last = min(first + window - 1, (budget - counts[1]) // counts[0],
+                       int(budget / (counts[0] + min_ratio * counts[1])))
+            if last < first:
+                return best
+            for match in _matches(first, last, bottom, top, (U_b, U_t), counts, strain, angle_tol,
+                                  budget, boxes=boxes, evaluate=evaluate):
+                if best is None or match.rank() < best.rank():
+                    best = match
+            first = last + 1
+            window *= 2

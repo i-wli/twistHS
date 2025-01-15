@@ -122,12 +122,12 @@ def supercell_matrices(A_b, A_t):
     return M_b, M_t
 
 
-def _polar_metrics(C_layer, C):
-    F = np.swapaxes(np.linalg.solve(C_layer, C), -1, -2)
-    strains = np.linalg.svd(F, compute_uv=False) - 1
+def _polar_metrics(C_layer, C, xp):
+    F = xp.swapaxes(xp.linalg.solve(C_layer, C), -1, -2)
+    strains = xp.linalg.svd(F, compute_uv=False) - 1
     # In 2D, for F = R S with S symmetric positive definite, the skew
     # difference and trace of F equal sin(phi) and cos(phi) times tr(S).
-    phi = np.degrees(np.arctan2(F[..., 1, 0] - F[..., 0, 1],
+    phi = xp.degrees(xp.arctan2(F[..., 1, 0] - F[..., 0, 1],
                                F[..., 0, 0] + F[..., 1, 1]))
     return strains, phi
 
@@ -137,13 +137,13 @@ def deformation(C_layer, C):
     C_layer, C = _lattice(C_layer), _lattice(C)
     if np.linalg.det(C_layer) * np.linalg.det(C) < 0:
         raise ValueError("Deformation must preserve orientation")
-    strains, phi = _polar_metrics(C_layer, C)
+    strains, phi = _polar_metrics(C_layer, C, np)
     return strains, float(phi)
 
 
 def principal_strains(C_layer, C):
     """Return engineering principal strains of the deformation into common C."""
-    return _polar_metrics(_lattice(C_layer), _lattice(C))[0]
+    return _polar_metrics(_lattice(C_layer), _lattice(C), np)[0]
 
 
 @dataclass(frozen=True)

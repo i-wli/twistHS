@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from itertools import product
 
 import numpy as np
@@ -7,7 +8,19 @@ from twistHS.lib.coincidence import _disk_mask, _matches, find_coincidence
 from twistHS.lib.moire import nearest_lattice_vector
 
 
-def test_lattice_vector_disk_against_nearest_oracle():
+@pytest.fixture(params=["numpy", "jax"])
+def backend(request):
+    if request.param == "jax":
+        pytest.importorskip("jax")
+    return request.param
+
+
+def test_lattice_vector_disk_against_nearest_oracle(backend):
+    xp, precision = np, nullcontext
+    if backend == "jax":
+        from twistHS.lib._coincidence_jax import enable_x64, jnp
+
+        xp, precision = jnp, enable_x64
     lattice = np.array([[1.0, 0], [0.8, 0.3]])
     coefficients = np.array(list(product(range(-5, 6), repeat=2)))
     vectors = coefficients @ lattice
@@ -15,7 +28,9 @@ def test_lattice_vector_disk_against_nearest_oracle():
         nearest = nearest_lattice_vector(target, lattice)
         distance = np.linalg.norm(nearest @ lattice - target)
         for radius in (distance * 0.99, distance * 1.01, distance * 3):
-            matches = _disk_mask(target, vectors, radius / np.linalg.norm(target))
+            with precision():
+                matches = np.asarray(_disk_mask(
+                    xp.asarray(target), xp.asarray(vectors), radius / np.linalg.norm(target), xp))
             np.testing.assert_array_equal(matches, np.linalg.norm(vectors - target, axis=1) <= radius)
             assert bool(matches.any()) == (radius > distance)
 
@@ -59,12 +74,19 @@ def pair_key(bottom, top):
     (np.eye(2) * 0.68, 0.20, 0.01),
     (np.array([[0.89, 0.12], [0.16, 1.02]]), 0.20, 12),
 ])
-def test_complete_search_against_brute_force(top, tolerance, angle_tol):
+def test_complete_search_against_brute_force(top, tolerance, angle_tol, backend):
     bottom = np.eye(2)
     budget = 5
     expected = list(brute_pairs(bottom, top, budget, tolerance, angle_tol))
-    actual = list(_matches(1, budget - 1, bottom, top, (np.eye(2, dtype=int),) * 2,
-                           (1, 1), tolerance, angle_tol, budget))
+    kernels, precision = {}, nullcontext
+    if backend == "jax":
+        from twistHS.lib import _coincidence_jax
+
+        kernels = {"boxes": _coincidence_jax.boxes, "evaluate": _coincidence_jax.evaluate}
+        precision = _coincidence_jax.enable_x64
+    with precision():
+        actual = list(_matches(1, budget - 1, bottom, top, (np.eye(2, dtype=int),) * 2,
+                               (1, 1), tolerance, angle_tol, budget, **kernels))
 
     # Convert each reduced bottom basis back to its HNF, applying the same
     # unimodular row transform to the top matrix before comparing pairs.
@@ -82,7 +104,7 @@ def test_complete_search_against_brute_force(top, tolerance, angle_tol):
     assert len(actual) == len(keys)
     assert keys == {pair_key(h, m) for h, m in expected}
     match = find_coincidence(bottom, top, (1, 1), tolerance=100 * tolerance,
-                             angle_tol=angle_tol, max_atoms=budget)
+                             angle_tol=angle_tol, max_atoms=budget, backend=backend)
     expected_count = min(round(np.linalg.det(h) + np.linalg.det(m)) for h, m in expected)
     assert match.atom_count == expected_count
     assert match.rank() == min(candidate.rank() for candidate in actual)
@@ -93,22 +115,22 @@ def test_complete_search_against_brute_force(top, tolerance, angle_tol):
         np.testing.assert_array_equal(match.top, 2 * match.bottom)
 
 
-def test_inclusive_search_bounds():
+def test_inclusive_search_bounds(backend):
     bottom = np.eye(2)
     top = 1.25 * bottom
-    assert find_coincidence(bottom, top, (1, 1), tolerance=12.5, angle_tol=0, max_atoms=2)
-    assert find_coincidence(bottom, top, (1, 1), tolerance=12.49, angle_tol=0, max_atoms=2) is None
-    assert find_coincidence(bottom, top, (1, 1), tolerance=12.5, angle_tol=0, max_atoms=1) is None
+    assert find_coincidence(bottom, top, (1, 1), tolerance=12.5, angle_tol=0, max_atoms=2, backend=backend)
+    assert find_coincidence(bottom, top, (1, 1), tolerance=12.49, angle_tol=0, max_atoms=2, backend=backend) is None
+    assert find_coincidence(bottom, top, (1, 1), tolerance=12.5, angle_tol=0, max_atoms=1, backend=backend) is None
 
     top = np.array([[1., 0.125], [-0.125, 1.]])
-    match = find_coincidence(bottom, top, (1, 1), angle_tol=10, max_atoms=2)
+    match = find_coincidence(bottom, top, (1, 1), angle_tol=10, max_atoms=2, backend=backend)
     angle_tol = abs(match.angle_offset)
-    assert find_coincidence(bottom, top, (1, 1), angle_tol=angle_tol, max_atoms=2)
-    assert find_coincidence(bottom, top, (1, 1), angle_tol=angle_tol - 0.01, max_atoms=2) is None
+    assert find_coincidence(bottom, top, (1, 1), angle_tol=angle_tol, max_atoms=2, backend=backend)
+    assert find_coincidence(bottom, top, (1, 1), angle_tol=angle_tol - 0.01, max_atoms=2, backend=backend) is None
 
 
 @pytest.mark.parametrize('kwargs', [
-    {'tolerance': -1}, {'angle_tol': np.inf}, {'max_atoms': 4.5},
+    {'tolerance': -1}, {'angle_tol': np.inf}, {'max_atoms': 4.5}, {'backend': 'gpu'},
 ])
 def test_invalid_search_limits(kwargs):
     with pytest.raises(ValueError, match=next(iter(kwargs))):

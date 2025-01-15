@@ -8,7 +8,9 @@ from twistHS.lib.coincidence import (
     DEFAULT_ANGLE_TOL,
     DEFAULT_MAX_ATOMS,
     DEFAULT_TOLERANCE,
+    SEARCH_BACKENDS,
     find_coincidence,
+    validate_search_backend,
     validate_search_limits,
     validate_tolerance,
 )
@@ -26,7 +28,7 @@ class HSGenerator:
     
     def __init__(self, bottom: Atoms, top: Atoms, *, method="search",
                  tolerance=DEFAULT_TOLERANCE, angle_tol=DEFAULT_ANGLE_TOL,
-                 max_atoms=DEFAULT_MAX_ATOMS):
+                 max_atoms=DEFAULT_MAX_ATOMS, backend="numpy"):
         self.bottom = bottom
         self.top = top
         self.logger = logging.getLogger(__name__)
@@ -35,10 +37,12 @@ class HSGenerator:
             raise ValueError("method must be 'search' or 'first-order'")
         validate_tolerance(tolerance)
         validate_search_limits(angle_tol, max_atoms)
+        validate_search_backend(backend)
         self.method = method
         self.tolerance = tolerance
         self.angle_tol = angle_tol
         self.max_atoms = max_atoms
+        self.backend = backend
 
     def _validate_inputs(self) -> None:
         """Validate input atomic structures."""
@@ -77,6 +81,7 @@ class HSGenerator:
             match = find_coincidence(
                 bottom, top, (len(self.bottom), len(self.top)),
                 tolerance=tolerance, angle_tol=self.angle_tol, max_atoms=self.max_atoms,
+                backend=self.backend,
             )
             if match is None:
                 return None
@@ -137,6 +142,8 @@ def get_parser():
     parser.add_argument('-al','--alist', help='start end step',nargs='+', type=float)
     parser.add_argument('-tol','--tolerance', help='max principal strain of either layer (%%), default = 1%%', type=float, default=DEFAULT_TOLERANCE)
     parser.add_argument('--method', choices=('search', 'first-order'), default='search')
+    parser.add_argument('--backend', choices=SEARCH_BACKENDS, default='numpy',
+                        help='coincidence search backend (default: %(default)s)')
     parser.add_argument('--angle-tol', type=float, default=DEFAULT_ANGLE_TOL,
                         help='maximum effective angle deviation in degrees for search (default: %(default)s)')
     parser.add_argument('--max-atoms', type=int, default=DEFAULT_MAX_ATOMS,

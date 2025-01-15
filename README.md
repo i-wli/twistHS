@@ -59,6 +59,13 @@ python -m pip install .
 
 Install `".[gui]"` to add the Gradio interface.
 
+Install `".[jax]"` to enable the optional JAX search backend. Select it with
+`--backend jax` on the CLI, `backend="jax"` in `HSGenerator`, or `jax` in
+the GUI's search backend menu. Both backends use double precision.
+For GPU execution, install a JAX build for your GPU and select the JAX
+backend. On NVIDIA CUDA, set `JAX_PLATFORMS=cuda` before launching twistHS
+to require CUDA.
+
 For local development and verification:
 
 ```sh

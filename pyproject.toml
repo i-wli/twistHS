@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 gui = ["gradio>=4"]
+jax = ["jax>=0.4.38"]
 test = ["pytest>=7"]
 
 [project.scripts]
