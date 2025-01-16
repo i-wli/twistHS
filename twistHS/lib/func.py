@@ -49,10 +49,10 @@ def py_atoms_to_ase_atoms(atoms: Pyatoms) -> Atoms:
     )    
     
 def check_vectors(atoms: Atoms):
-    cell_params = atoms.cell.cellpar()
-    if not (float_eq(cell_params[3], 90.0) and
-            float_eq(cell_params[4], 90.0)):
-        raise ValueError('[err] Input structures: c axis must be in z direction')
+    cell = atoms.cell
+    if not (np.all(np.abs(cell[:2, 2]) <= DEFAULT_PRECISION) and
+            np.all(np.abs(cell[2, :2]) <= DEFAULT_PRECISION)):
+        raise ValueError('[err] Input structures: a and b must lie in the xy plane and c along z')
 
 def coord_cart2frac(cell_vecs: np.ndarray, cart_coords: np.ndarray) -> np.ndarray:
     """Transfrom the cart coords to frac coords"""

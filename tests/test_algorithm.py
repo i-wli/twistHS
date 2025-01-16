@@ -5,7 +5,7 @@ import numpy as np
 import ase.io
 from ase import Atoms
 from twistHS.lib.algorithm import HSGenerator
-from twistHS.lib.func import Pyatoms, get_supercell_atoms_pos, lattice_points_in_supercell
+from twistHS.lib.func import Pyatoms, check_vectors, get_supercell_atoms_pos, lattice_points_in_supercell
 
 @pytest.fixture
 def test_structures():
@@ -105,6 +105,20 @@ def test_gen_supercell_layer_separation(test_structures):
     
     assert len(unique_z) == 2  # Should have exactly 2 distinct z-levels
     assert np.abs(unique_z[1] - unique_z[0]) == pytest.approx(delta_z, rel=1e-5)
+
+
+def test_check_vectors_requires_xy_layer_plane():
+    atoms = Atoms('C', cell=[[0, 3, 0], [0, 0, 4], [15, 0, 0]])
+    with pytest.raises(ValueError, match='xy plane'):
+        check_vectors(atoms)
+    atoms.cell = [[3, 0, 1e-6], [0, 4, -1e-6], [1e-6, -1e-6, 15]]
+    check_vectors(atoms)
+    for row, col in [(0, 2), (1, 2), (2, 0), (2, 1)]:
+        tilted = atoms.copy()
+        tilted.cell[row, col] = np.nextafter(tilted.cell[row, col], 2 * tilted.cell[row, col])
+        with pytest.raises(ValueError, match='xy plane'):
+            check_vectors(tilted)
+
 
 def test_gen_supercell_rotation(test_structures):
     """Test if supercell is properly generated"""

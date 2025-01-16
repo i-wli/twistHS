@@ -5,7 +5,8 @@ The default coincidence search runs. It enumerates bottom sublattices in Hermite
 matches their basis vectors to the rotated top lattice. For each requested
 angle, it returns the cell with the fewest atoms that satisfies all three
 limits. Ties are resolved by maximum strain, effective angle deviation, and
-the integer matrices.
+the integer matrices. Strain (as a fraction) and angle deviation (in degrees)
+are rounded to nine decimal places for ranking.
 
 - `--tolerance` limits the maximum absolute principal strain across both
   layers. The default is 1%.

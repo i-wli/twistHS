@@ -28,7 +28,7 @@ class Coincidence:
 
     def rank(self):
         offset = abs(self.angle_offset)
-        return (self.atom_count, self.strain, min(offset, 360 - offset),
+        return (self.atom_count, round(self.strain, 9), round(min(offset, 360 - offset), 9),
                 *self.bottom.ravel(), *self.top.ravel())
 
 

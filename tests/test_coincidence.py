@@ -4,7 +4,7 @@ from itertools import product
 import numpy as np
 import pytest
 
-from twistHS.lib.coincidence import _disk_mask, _matches, find_coincidence
+from twistHS.lib.coincidence import Coincidence, _disk_mask, _matches, find_coincidence
 from twistHS.lib.moire import nearest_lattice_vector
 
 
@@ -127,6 +127,13 @@ def test_inclusive_search_bounds(backend):
     angle_tol = abs(match.angle_offset)
     assert find_coincidence(bottom, top, (1, 1), angle_tol=angle_tol, max_atoms=2, backend=backend)
     assert find_coincidence(bottom, top, (1, 1), angle_tol=angle_tol - 0.01, max_atoms=2, backend=backend) is None
+
+
+def test_rank_breaks_ties_using_integer_matrices():
+    identity = np.eye(2, dtype=int)
+    preferred = Coincidence(-identity, -identity, 4, 0.001 + 1e-16, 359.95 - 1e-12)
+    other = Coincidence(identity, identity, 4, 0.001, 0.05)
+    assert preferred.rank() < other.rank()
 
 
 @pytest.mark.parametrize('kwargs', [
