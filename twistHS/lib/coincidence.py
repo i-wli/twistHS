@@ -8,12 +8,13 @@ from operator import index
 
 import numpy as np
 
-from twistHS.lib.moire import _polar_metrics, reduce_basis
+from twistHS.lib.moire import _polar_metrics, nearest_lattice_vector, reciprocal_2d, reduce_basis
 
 _BATCH = 4096
-_BOUND_SLACK = 1e-12  # Expand prefilters for roundoff without relaxing the final limits.
+_BOUND_SLACK = 1e-12
 DEFAULT_TOLERANCE = 1.0
 DEFAULT_ANGLE_TOL = 0.1
+DEFAULT_MOIRE_TOL = 5.0
 DEFAULT_MAX_ATOMS = 12000
 SEARCH_BACKENDS = ("numpy", "jax")
 
@@ -37,9 +38,11 @@ def validate_tolerance(tolerance):
         raise ValueError("tolerance must be a strain percentage in [0, 100)")
 
 
-def validate_search_limits(angle_tol, max_atoms):
+def validate_search_limits(angle_tol, max_atoms, *, moire_tol=DEFAULT_MOIRE_TOL):
     if not np.isfinite(angle_tol) or not 0 <= angle_tol <= 180:
         raise ValueError("angle_tol must be in [0, 180] degrees")
+    if not np.isfinite(moire_tol) or not 0 <= moire_tol < 100:
+        raise ValueError("moire_tol must be a percentage in [0, 100)")
     if isinstance(max_atoms, bool) or not isinstance(max_atoms, (int, np.integer)) or max_atoms < 1:
         raise ValueError("max_atoms must be a positive integer")
 
@@ -125,13 +128,33 @@ def _disk_mask(cells_b, cells_t, relative_radius, xp=np):
             <= relative_radius**2 * xp.sum(cells_b**2, axis=-1))
 
 
-def _evaluate(bottom_matrices, top_matrices, bottom, top, relative_radius, *, xp=np):
+def _moire_projection(bottom, top, moire_tolerance):
+    G_b, _ = reduce_basis(reciprocal_2d(bottom))
+    reciprocal_top = reciprocal_2d(top)
+    G_t = np.array([nearest_lattice_vector(g, reciprocal_top) @ reciprocal_top for g in G_b])
+    directions, singular_values, _ = np.linalg.svd(G_b - G_t)
+    slack = _BOUND_SLACK * max(np.linalg.norm(G_b, ord=2), np.linalg.norm(G_t, ord=2))
+    # Normalize in the left singular directions of Q, including its null space.
+    return (directions.T @ (G_b + G_t)) / (moire_tolerance * singular_values + slack)[:, None]
+
+
+def _evaluate(bottom_matrices, top_matrices, bottom, top, relative_radius, moire_projection, *, xp=np):
     B, T = bottom_matrices @ bottom, top_matrices @ top
     C = (B + T) / 2
     strains_b, phi_b = _polar_metrics(B, C, xp)
     strains_t, phi_t = _polar_metrics(T, C, xp)
     strain = xp.max(xp.maximum(xp.abs(strains_b), xp.abs(strains_t)), axis=-1)
-    feasible = (_det(C) > 0) & xp.all(_disk_mask(B, T, relative_radius, xp), axis=-1)
+    positive = _det(C) > 0
+    identity = xp.eye(2, dtype=C.dtype)
+    safe_common = xp.where(positive[..., None, None], C, identity)
+    # The inverse layer deformations are I + X and I - X, so the
+    # reciprocal difference changes by (G_b + G_t) X.
+    X = xp.swapaxes(xp.linalg.solve(safe_common, (B - T) / 2), -1, -2)
+    D = moire_projection @ X
+    residual = identity - D @ xp.swapaxes(D, -1, -2)
+    # A symmetric 2x2 matrix is positive semidefinite when trace and det are nonnegative.
+    moire_ok = (xp.trace(residual, axis1=-2, axis2=-1) >= 0) & (_det(residual) >= 0)
+    feasible = positive & moire_ok & xp.all(_disk_mask(B, T, relative_radius, xp), axis=-1)
     return strain, phi_t - phi_b, feasible
 
 
@@ -169,20 +192,31 @@ def _area_bounds(bottom, top, tolerance):
             area_ratio * stretch_ratio**2 * (1 + _BOUND_SLACK))
 
 
-def _matches(first, last, bottom, top, transforms, counts, tolerance, angle_tol, budget,
-             *, boxes=_boxes, evaluate=_evaluate):
-    """Yield every passing matrix pair for the given bottom determinant interval."""
-    area_bounds = _area_bounds(bottom, top, tolerance)
+def _search_bounds(bottom, top, tolerance, angle_tol, moire_projection):
     # T = B (F_t^-1 F_b)^T. The two stretches can differ by at most
     # 2*tolerance and the polar rotations by 2*sin(angle_tol/2) in operator norm.
-    radius = ((2 * tolerance + 2 * np.sin(np.radians(angle_tol) / 2)) / (1 - tolerance)
-              + _BOUND_SLACK)
+    radius = (2 * tolerance + 2 * np.sin(np.radians(angle_tol) / 2)) / (1 - tolerance)
+    area_tolerance = tolerance
+    s_max, s_min = np.linalg.svd(moire_projection, compute_uv=False)
+    lower = s_min - _BOUND_SLACK * s_max
+    if lower > 1:
+        # ||L X|| <= 1 bounds ||X||. Since B and T are C (I +/- X)^T,
+        # their relative displacement and area ratio follow from I +/- X.
+        x = 1 / lower
+        radius = min(radius, 2 * x / (1 - x))
+        area_tolerance = min(tolerance, x)
+    return radius + _BOUND_SLACK, _area_bounds(bottom, top, area_tolerance)
+
+
+def _matches(first, last, bottom, top, transforms, counts, tolerance, angle_tol, budget,
+             radius, area_bounds, moire_projection, *, boxes=_boxes, evaluate=_evaluate):
+    """Yield every passing matrix pair for the given bottom determinant interval."""
     top_inverse = np.linalg.inv(top)
     for hnfs in _batches(_hnfs(first, last)):
         pairs = _matrix_pairs(hnfs, bottom, top_inverse, radius, area_bounds, counts, budget, boxes)
         for batch in _batches(pairs):
             M_b, M_t = batch[:, 0], batch[:, 1]
-            strain, offset, feasible = evaluate(M_b, M_t, bottom, top, radius)
+            strain, offset, feasible = evaluate(M_b, M_t, bottom, top, radius, moire_projection)
             angle_error = np.abs(offset)
             angle_error = np.minimum(angle_error, 360 - angle_error)
             valid = np.flatnonzero(feasible & (strain <= tolerance) & (angle_error <= angle_tol))
@@ -193,15 +227,17 @@ def _matches(first, last, bottom, top, transforms, counts, tolerance, angle_tol,
 
 
 def find_coincidence(A_b, A_t, counts, *, tolerance=DEFAULT_TOLERANCE,
-                     angle_tol=DEFAULT_ANGLE_TOL, max_atoms=DEFAULT_MAX_ATOMS, backend="numpy"):
+                     angle_tol=DEFAULT_ANGLE_TOL, moire_tol=DEFAULT_MOIRE_TOL,
+                     max_atoms=DEFAULT_MAX_ATOMS, backend="numpy"):
     """Return the smallest accepted pair of integer transforms, or None.
 
     A_t includes the requested twist. Counts give atoms per primitive cell,
-    tolerance is in percent, and angle_tol is in degrees. Select the optional
-    JAX kernels with backend="jax".
+    tolerance and moire_tol are percentages, and angle_tol is in degrees.
+    moire_tol limits the relative change of the moiré wave vectors in all
+    directions. Select the optional JAX kernels with backend="jax".
     """
     validate_tolerance(tolerance)
-    validate_search_limits(angle_tol, max_atoms)
+    validate_search_limits(angle_tol, max_atoms, moire_tol=moire_tol)
     validate_search_backend(backend)
     counts = tuple(map(index, counts))
     if len(counts) != 2 or min(counts) < 1:
@@ -209,7 +245,9 @@ def find_coincidence(A_b, A_t, counts, *, tolerance=DEFAULT_TOLERANCE,
     bottom, U_b = _positive_basis(A_b)
     top, U_t = _positive_basis(A_t)
     strain = tolerance / 100
-    min_ratio, _ = _area_bounds(bottom, top, strain)
+    moire_projection = _moire_projection(bottom, top, moire_tol / 100)
+    radius, area_bounds = _search_bounds(bottom, top, strain, angle_tol, moire_projection)
+    min_ratio = area_bounds[0]
 
     boxes, evaluate, precision = _boxes, _evaluate, nullcontext
     if backend == "jax":
@@ -233,7 +271,8 @@ def find_coincidence(A_b, A_t, counts, *, tolerance=DEFAULT_TOLERANCE,
             if last < first:
                 return best
             for match in _matches(first, last, bottom, top, (U_b, U_t), counts, strain, angle_tol,
-                                  budget, boxes=boxes, evaluate=evaluate):
+                                  budget, radius, area_bounds, moire_projection,
+                                  boxes=boxes, evaluate=evaluate):
                 if best is None or match.rank() < best.rank():
                     best = match
             first = last + 1

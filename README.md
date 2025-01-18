@@ -1,10 +1,10 @@
 # Twisted Heterostructure Generation Toolkit
 A Python-based solution for generating twisted heterostructures through both a Command-Line Interface (CLI) and a Graphical User Interface (GUI). Whether you are a researcher, student, or hobbyist interested in the fascinating world of moiré patterns, this toolkit is designed to provide a flexible and user-friendly approach to exploring these patterns.
 
-The default coincidence search runs. It enumerates bottom sublattices in Hermite normal form and
-matches their basis vectors to the rotated top lattice. For each requested
-angle, it returns the cell with the fewest atoms that satisfies all three
-limits. Ties are resolved by maximum strain, effective angle deviation, and
+The default coincidence search enumerates bottom sublattices in Hermite normal
+form and matches their basis vectors to the rotated top lattice. For each
+requested angle, it returns the cell with the fewest atoms that satisfies all
+four limits. Ties are resolved by maximum strain, effective angle deviation, and
 the integer matrices. Strain (as a fraction) and angle deviation (in degrees)
 are rounded to nine decimal places for ranking.
 
@@ -12,12 +12,23 @@ are rounded to nine decimal places for ranking.
   layers. The default is 1%.
 - `--angle-tol` limits the difference between requested and effective twist.
   The default is 0.1°.
+- `--moire-tol` limits the relative change of moiré wave vectors in any
+  direction. It accepts percentages from 0% up to 100%, exclusive, and
+  defaults to 5%.
 - `--max-atoms` limits the total number of atoms. The default is 12,000.
 
 Both layers deform into their average cell `C`. The right polar decomposition
 of `F = (C_layer^-1 C)^T` gives a rotation `phi` and a stretch whose principal
 values minus one give the engineering strains. The effective twist is
 `theta_eff = theta + phi_top - phi_bottom`. Both interfaces plot this angle.
+
+The moiré limit uses the differences between the two reduced bottom reciprocal
+vectors and their nearest top reciprocal vectors at the requested angle.
+After both layers deform, the change in any linear combination of these
+differences must be within the specified percentage of its original length,
+up to numerical roundoff. This limits changes in both length and direction
+and keeps a two-dimensional moiré from collapsing into stripes. Angles with
+no cell within the four limits are omitted from scans.
 
 `--method first-order` reproduces the v1 rounding approach for aligned
 primitive bases. It pairs the reduced bottom reciprocal vectors with their
@@ -124,7 +135,7 @@ from ase.io import read
 from twistHS.lib.algorithm import HSGenerator
 
 generator = HSGenerator(read("tests/graphene.xsf"), read("tests/MoS2.xsf"),
-                        tolerance=1.0, angle_tol=0.1, max_atoms=12_000)
+                        tolerance=1.0, angle_tol=0.1, moire_tol=5.0, max_atoms=12_000)
 atoms, strain, theta_eff = generator.gen_supercell(5, super_z=30, delta_z=7)
 for requested_angle, atoms, strain in generator.scan([4, 5, 6], super_z=30, delta_z=7):
     print(requested_angle, atoms.info["theta_eff"], len(atoms), 100 * strain)

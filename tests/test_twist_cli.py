@@ -114,17 +114,26 @@ def test_main_filters_angles_and_results(monkeypatch):
     from twistHS.twist_cli import main
     root = Path(__file__).parent
     monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', str(root / 'graphene.xsf'),
-                        '-t', str(root / 'graphene.xsf'), '-a', '0.05', '5', '-tol', '0.5',
-                        '--angle-tol', '0.1', '--max-atoms', '4'])
+                        '-t', str(root / 'graphene.xsf'), '-a', '0.05', '21.84', '5', '-tol', '0.5',
+                        '--angle-tol', '0.1', '--moire-tol', '0.3', '--max-atoms', '28'])
     with (patch('twistHS.twist_cli.StructureVisualizer') as visualizer,
           patch('matplotlib.pyplot.show'), patch('matplotlib.pyplot.scatter', wraps=plt.scatter) as scatter):
         main()
     angles, _, _, _, results = visualizer.call_args.args
-    np.testing.assert_array_equal(angles, [0.05])
+    np.testing.assert_array_equal(angles, [21.84])
     assert len(results) == 1
-    assert len(results[0][0]) == 4
+    assert len(results[0][0]) == 28
     assert results[0][1] * 100 <= 0.5
-    np.testing.assert_allclose(scatter.call_args.args[0], [0], atol=1e-12)
+    np.testing.assert_allclose(scatter.call_args.args[0], [21.7867893], rtol=0, atol=1e-7)
+
+
+def test_main_applies_moire_tolerance(monkeypatch):
+    from twistHS.twist_cli import main
+    graphene = str(Path(__file__).parent / 'graphene.xsf')
+    monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', graphene, '-t', graphene,
+                        '-a', '21.84', '--moire-tol', '0.2', '--max-atoms', '28'])
+    with pytest.raises(SystemExit, match='No structure within the configured limits'):
+        main()
 
 
 def test_main_no_structure_within_tolerance(monkeypatch):

@@ -7,6 +7,7 @@ from ase import Atoms
 from twistHS.lib.coincidence import (
     DEFAULT_ANGLE_TOL,
     DEFAULT_MAX_ATOMS,
+    DEFAULT_MOIRE_TOL,
     DEFAULT_TOLERANCE,
     SEARCH_BACKENDS,
     find_coincidence,
@@ -28,7 +29,7 @@ class HSGenerator:
     
     def __init__(self, bottom: Atoms, top: Atoms, *, method="search",
                  tolerance=DEFAULT_TOLERANCE, angle_tol=DEFAULT_ANGLE_TOL,
-                 max_atoms=DEFAULT_MAX_ATOMS, backend="numpy"):
+                 moire_tol=DEFAULT_MOIRE_TOL, max_atoms=DEFAULT_MAX_ATOMS, backend="numpy"):
         self.bottom = bottom
         self.top = top
         self.logger = logging.getLogger(__name__)
@@ -36,11 +37,12 @@ class HSGenerator:
         if method not in ("search", "first-order"):
             raise ValueError("method must be 'search' or 'first-order'")
         validate_tolerance(tolerance)
-        validate_search_limits(angle_tol, max_atoms)
+        validate_search_limits(angle_tol, max_atoms, moire_tol=moire_tol)
         validate_search_backend(backend)
         self.method = method
         self.tolerance = tolerance
         self.angle_tol = angle_tol
+        self.moire_tol = moire_tol
         self.max_atoms = max_atoms
         self.backend = backend
 
@@ -80,8 +82,8 @@ class HSGenerator:
         if self.method == "search":
             match = find_coincidence(
                 bottom, top, (len(self.bottom), len(self.top)),
-                tolerance=tolerance, angle_tol=self.angle_tol, max_atoms=self.max_atoms,
-                backend=self.backend,
+                tolerance=tolerance, angle_tol=self.angle_tol, moire_tol=self.moire_tol,
+                max_atoms=self.max_atoms, backend=self.backend,
             )
             if match is None:
                 return None
@@ -146,6 +148,8 @@ def get_parser():
                         help='coincidence search backend (default: %(default)s)')
     parser.add_argument('--angle-tol', type=float, default=DEFAULT_ANGLE_TOL,
                         help='maximum effective angle deviation in degrees for search (default: %(default)s)')
+    parser.add_argument('--moire-tol', type=float, default=DEFAULT_MOIRE_TOL,
+                        help='maximum relative moiré wave-vector change in any direction (%%, default: %(default)s)')
     parser.add_argument('--max-atoms', type=int, default=DEFAULT_MAX_ATOMS,
                         help='maximum total atom count for search (default: %(default)s)')
     parser.add_argument('-mo', '--max-order', type=int, help='reciprocal length cutoff for higher-order analysis (integer >= 1)')

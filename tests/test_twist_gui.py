@@ -13,10 +13,11 @@ def test_filtered_angles_stay_aligned(tmp_path):
     bottom = ase.io.read(root / 'graphene.xsf')
     top = bottom.copy()
     handler = StructureVisualizer(bottom, top, 30, 7)
-    figure, angles, results = handler.generate_initial_plot(0.05, 0.0502, 0.0001, 0.5)
-    np.testing.assert_array_equal(angles, [0.05, 0.0501])
-    np.testing.assert_allclose(figure.axes[0].collections[0].get_offsets()[:, 0], [0, 0], atol=1e-12)
-    generator = HSGenerator(bottom, top)
+    figure, angles, results = handler.generate_initial_plot(21.84, 21.8402, 0.0001, 0.5, moire_tol=0.3)
+    np.testing.assert_array_equal(angles, [21.84, 21.8401])
+    np.testing.assert_allclose(figure.axes[0].collections[0].get_offsets()[:, 0],
+                               [21.7867893, 21.7867893], rtol=0, atol=1e-7)
+    generator = HSGenerator(bottom, top, moire_tol=0.3)
     assert len(angles) == len(results)
     for angle, (result, strain) in zip(angles, results):
         expected, expected_strain, theta_eff = generator.gen_supercell(angle, 30, 7)
@@ -26,7 +27,7 @@ def test_filtered_angles_stay_aligned(tmp_path):
     detailed = handler.generate_detailed_structure(angles[0], angles, results)
     assert isinstance(detailed, plt.Figure)
     destination = tmp_path / 'selected.xsf'
-    handler.save_structure(0.0501, angles, results, str(destination))
+    handler.save_structure(21.8401, angles, results, str(destination))
     saved = ase.io.read(destination)
     assert len(saved) == len(results[1][0])
     np.testing.assert_allclose(saved.cell, results[1][0].cell, rtol=0, atol=1e-12)

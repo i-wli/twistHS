@@ -11,6 +11,7 @@ from ase.neighborlist import neighbor_list
 from twistHS.lib.coincidence import (
     DEFAULT_ANGLE_TOL,
     DEFAULT_MAX_ATOMS,
+    DEFAULT_MOIRE_TOL,
     DEFAULT_TOLERANCE,
     find_coincidence,
 )
@@ -57,7 +58,8 @@ def archive_layer_strain(archive, reference, metal_type):
     return float(np.max(np.abs(strain)))
 
 
-def compare(archive_root, system, bottom, top, *, tolerance, angle_tol, max_atoms):
+def compare(archive_root, system, bottom, top, *, tolerance, angle_tol, max_atoms,
+            moire_tol=DEFAULT_MOIRE_TOL):
     files = sorted((archive_root / system).glob("*/lammps.lmp"),
                    key=lambda path: float(path.parent.name))
     if not files:
@@ -76,11 +78,12 @@ def compare(archive_root, system, bottom, top, *, tolerance, angle_tol, max_atom
         rotated.rotate(angle, "z", rotate_cell=True)
         match = find_coincidence(
             bottom.cell[:2, :2], rotated.cell[:2, :2], (len(bottom), len(top)),
-            tolerance=tolerance, angle_tol=angle_tol, max_atoms=max_atoms,
+            tolerance=tolerance, angle_tol=angle_tol, moire_tol=moire_tol, max_atoms=max_atoms,
         )
         yield {
             "angle_deg": angle,
             "tolerance_pct": tolerance,
+            "moire_tol_pct": moire_tol,
             "v1_atoms": len(archive),
             "v1_strain_pct": strain,
             "v1_within_tolerance": strain <= tolerance,
@@ -99,11 +102,13 @@ def main():
     parser.add_argument("top", type=Path, help="Unstrained upper monolayer")
     parser.add_argument("--tolerance", type=float, default=DEFAULT_TOLERANCE)
     parser.add_argument("--angle-tol", type=float, default=DEFAULT_ANGLE_TOL)
+    parser.add_argument("--moire-tol", type=float, default=DEFAULT_MOIRE_TOL)
     parser.add_argument("--max-atoms", type=int, default=DEFAULT_MAX_ATOMS)
     args = parser.parse_args()
 
     rows = list(compare(args.archive_root, args.system, read(args.bottom), read(args.top),
-                        tolerance=args.tolerance, angle_tol=args.angle_tol, max_atoms=args.max_atoms))
+                        tolerance=args.tolerance, angle_tol=args.angle_tol,
+                        moire_tol=args.moire_tol, max_atoms=args.max_atoms))
     destination = Path("results") / f"{Path(args.system).name}_v1_search.csv"
     destination.parent.mkdir(exist_ok=True)
     with destination.open("w", newline="") as stream:

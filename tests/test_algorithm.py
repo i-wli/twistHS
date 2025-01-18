@@ -252,13 +252,13 @@ def test_first_order_v1_atom_count(test_structures, theta):
 
 def test_search_scan_effective_angle_and_no_match(test_structures):
     bottom, _ = test_structures
-    generator = HSGenerator(bottom, bottom, max_atoms=4)
-    entries = generator.scan([0.05, 5], 30, 7)
+    generator = HSGenerator(bottom, bottom, max_atoms=28)
+    entries = generator.scan([0.05, 21.84, 5], 30, 7)
     requested, structure, strain = entries[0]
     assert len(entries) == 1
-    assert requested == 0.05
-    assert structure.info["theta_eff"] == pytest.approx(0, abs=1e-12)
-    assert len(structure) == 4
+    assert requested == 21.84
+    assert structure.info["theta_eff"] == pytest.approx(21.7867893, abs=1e-7)
+    assert len(structure) == 28
     assert 0 < strain < 1e-6
     with pytest.raises(ValueError, match='No coincidence cell at 5'):
         generator.gen_supercell(5, 30, 7)

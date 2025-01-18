@@ -25,6 +25,6 @@ def boxes(matrices, bottom, top_inverse, radius):
     return tuple(np.asarray(array)[:len(matrices)] for array in result)
 
 
-def evaluate(bottom_matrices, top_matrices, bottom, top, radius):
-    result = _jax_evaluate(_pad(bottom_matrices), _pad(top_matrices), bottom, top, radius)
+def evaluate(bottom_matrices, top_matrices, bottom, top, radius, moire_projection):
+    result = _jax_evaluate(_pad(bottom_matrices), _pad(top_matrices), bottom, top, radius, moire_projection)
     return tuple(np.asarray(array)[:len(bottom_matrices)] for array in result)

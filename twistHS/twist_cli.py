@@ -61,8 +61,8 @@ def main():
     top = ase.io.read(args.top)
 
     twistSupercell = HSGenerator(bottom, top, method=args.method, tolerance=args.tolerance,
-                                angle_tol=args.angle_tol, max_atoms=args.max_atoms,
-                                backend=args.backend)
+                                angle_tol=args.angle_tol, moire_tol=args.moire_tol,
+                                max_atoms=args.max_atoms, backend=args.backend)
 
     if args.alist is None:
         angles = args.angle

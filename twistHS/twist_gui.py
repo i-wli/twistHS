@@ -8,7 +8,7 @@ import gradio as gr
 from ase.visualize.plot import plot_atoms
 
 from twistHS.lib.algorithm import HSGenerator
-from twistHS.lib.coincidence import SEARCH_BACKENDS
+from twistHS.lib.coincidence import DEFAULT_MOIRE_TOL, SEARCH_BACKENDS
 
 class StructureVisualizer:
     def __init__(self, bottom, top, z, d):
@@ -17,10 +17,11 @@ class StructureVisualizer:
         self.z = z
         self.d = d
 
-    def generate_initial_plot(self, angle_start, angle_end, angle_step, tolerance, *, backend="numpy"):
+    def generate_initial_plot(self, angle_start, angle_end, angle_step, tolerance, *,
+                              backend="numpy", moire_tol=DEFAULT_MOIRE_TOL):
         start, end, step = (Decimal(str(value)) for value in (angle_start, angle_end, angle_step))
         angles = [float(start + i * step) for i in range(ceil((end - start) / step))]
-        twistSupercell = HSGenerator(self.bottom, self.top, backend=backend)
+        twistSupercell = HSGenerator(self.bottom, self.top, backend=backend, moire_tol=moire_tol)
         entries = twistSupercell.scan(angles, self.z, self.d, tolerance)
         if not entries:
             return None, None, None
@@ -66,14 +67,14 @@ class StructureVisualizer:
             return None
 
 def main_interface(bottom_file, top_file, angle_start, angle_end, angle_step, z, d, tol,
-                   selected_angle, save_option, filename, backend="numpy"):
+                   selected_angle, save_option, filename, backend="numpy", moire_tol=DEFAULT_MOIRE_TOL):
     try:
         bottom = ase.io.read(bottom_file.name)
         top = ase.io.read(top_file.name)
         
         handler = StructureVisualizer(bottom, top, z, d)
         initial_plot, angles, results = handler.generate_initial_plot(
-            angle_start, angle_end, angle_step, tol, backend=backend)
+            angle_start, angle_end, angle_step, tol, backend=backend, moire_tol=moire_tol)
         if initial_plot is None:
             return "No valid structures found in the given range.", None, None, None
         saved_file_path = None
@@ -112,6 +113,7 @@ def main():
     gr.Checkbox(label="Save Structure", value=False),
     gr.Textbox(label="Filename to save structure, default=structure_angle.xsf"),
     gr.Dropdown(choices=list(SEARCH_BACKENDS), value="numpy", label="Coincidence search backend"),
+    gr.Number(value=DEFAULT_MOIRE_TOL, label="Max relative moiré wave-vector change (%)"),
     ],
     outputs=[
     gr.Textbox(label="Status"),
