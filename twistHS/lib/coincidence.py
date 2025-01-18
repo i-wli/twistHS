@@ -129,13 +129,17 @@ def _disk_mask(cells_b, cells_t, relative_radius, xp=np):
 
 
 def _moire_projection(bottom, top, moire_tolerance):
-    G_b, _ = reduce_basis(reciprocal_2d(bottom))
-    reciprocal_top = reciprocal_2d(top)
-    G_t = np.array([nearest_lattice_vector(g, reciprocal_top) @ reciprocal_top for g in G_b])
-    directions, singular_values, _ = np.linalg.svd(G_b - G_t)
-    slack = _BOUND_SLACK * max(np.linalg.norm(G_b, ord=2), np.linalg.norm(G_t, ord=2))
-    # Normalize in the left singular directions of Q, including its null space.
-    return (directions.T @ (G_b + G_t)) / (moire_tolerance * singular_values + slack)[:, None]
+    reciprocal_b, reciprocal_t = reciprocal_2d(bottom), reciprocal_2d(top)
+    projections = []
+    for source, target in ((reciprocal_b, reciprocal_t), (reciprocal_t, reciprocal_b)):
+        G_source, _ = reduce_basis(source)
+        G_target = np.array([nearest_lattice_vector(g, target) @ target for g in G_source])
+        directions, singular_values, _ = np.linalg.svd(G_source - G_target)
+        slack = _BOUND_SLACK * max(np.linalg.norm(G_source, ord=2), np.linalg.norm(G_target, ord=2))
+        # Normalize in the left singular directions of Q, including its null space.
+        scale = moire_tolerance * singular_values + slack
+        projections.append((directions.T @ (G_source + G_target)) / scale[:, None])
+    return np.stack(projections)
 
 
 def _evaluate(bottom_matrices, top_matrices, bottom, top, relative_radius, moire_projection, *, xp=np):
@@ -148,13 +152,14 @@ def _evaluate(bottom_matrices, top_matrices, bottom, top, relative_radius, moire
     identity = xp.eye(2, dtype=C.dtype)
     safe_common = xp.where(positive[..., None, None], C, identity)
     # The inverse layer deformations are I + X and I - X, so the
-    # reciprocal difference changes by (G_b + G_t) X.
+    # reciprocal difference changes by (G_b + G_t) X, up to the pairing sign.
+    # The sign cancels in D D^T. Broadcast each candidate across both pairings.
     X = xp.swapaxes(xp.linalg.solve(safe_common, (B - T) / 2), -1, -2)
-    D = moire_projection @ X
+    D = moire_projection @ X[:, None, :, :]
     residual = identity - D @ xp.swapaxes(D, -1, -2)
     # A symmetric 2x2 matrix is positive semidefinite when trace and det are nonnegative.
     moire_ok = (xp.trace(residual, axis1=-2, axis2=-1) >= 0) & (_det(residual) >= 0)
-    feasible = positive & moire_ok & xp.all(_disk_mask(B, T, relative_radius, xp), axis=-1)
+    feasible = positive & xp.all(moire_ok, axis=-1) & xp.all(_disk_mask(B, T, relative_radius, xp), axis=-1)
     return strain, phi_t - phi_b, feasible
 
 
@@ -197,8 +202,8 @@ def _search_bounds(bottom, top, tolerance, angle_tol, moire_projection):
     # 2*tolerance and the polar rotations by 2*sin(angle_tol/2) in operator norm.
     radius = (2 * tolerance + 2 * np.sin(np.radians(angle_tol) / 2)) / (1 - tolerance)
     area_tolerance = tolerance
-    s_max, s_min = np.linalg.svd(moire_projection, compute_uv=False)
-    lower = s_min - _BOUND_SLACK * s_max
+    singular_values = np.linalg.svd(moire_projection, compute_uv=False)
+    lower = np.max(singular_values[:, -1] - _BOUND_SLACK * singular_values[:, 0])
     if lower > 1:
         # ||L X|| <= 1 bounds ||X||. Since B and T are C (I +/- X)^T,
         # their relative displacement and area ratio follow from I +/- X.
@@ -233,8 +238,9 @@ def find_coincidence(A_b, A_t, counts, *, tolerance=DEFAULT_TOLERANCE,
 
     A_t includes the requested twist. Counts give atoms per primitive cell,
     tolerance and moire_tol are percentages, and angle_tol is in degrees.
-    moire_tol limits the relative change of the moiré wave vectors in all
-    directions. Select the optional JAX kernels with backend="jax".
+    moire_tol limits the relative change of any linear combination of the
+    moiré wave vectors in each set of nearest reciprocal pairs, one set
+    starting from each layer. Select the optional JAX kernels with backend="jax".
     """
     validate_tolerance(tolerance)
     validate_search_limits(angle_tol, max_atoms, moire_tol=moire_tol)

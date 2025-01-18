@@ -22,13 +22,14 @@ of `F = (C_layer^-1 C)^T` gives a rotation `phi` and a stretch whose principal
 values minus one give the engineering strains. The effective twist is
 `theta_eff = theta + phi_top - phi_bottom`. Both interfaces plot this angle.
 
-The moiré limit uses the differences between the two reduced bottom reciprocal
-vectors and their nearest top reciprocal vectors at the requested angle.
-After both layers deform, the change in any linear combination of these
-differences must be within the specified percentage of its original length,
-up to numerical roundoff. This limits changes in both length and direction
-and keeps a two-dimensional moiré from collapsing into stripes. Angles with
-no cell within the four limits are omitted from scans.
+At the requested angle, the search pairs each layer's two reduced reciprocal
+basis vectors with their nearest vectors in the other layer. This gives two
+sets of reference moiré wave vectors. For each set, deformation may change
+any linear combination of its wave vectors by at most the specified
+percentage of the combination's original length, up to numerical roundoff.
+This limits changes in both length and direction and keeps a two-dimensional
+reference from collapsing into stripes. Angles with no cell within the four
+limits are omitted from scans.
 
 `--method first-order` reproduces the v1 rounding approach for aligned
 primitive bases. It pairs the reduced bottom reciprocal vectors with their
