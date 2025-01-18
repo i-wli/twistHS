@@ -107,6 +107,21 @@ def test_gen_supercell_layer_separation(test_structures):
     assert np.abs(unique_z[1] - unique_z[0]) == pytest.approx(delta_z, rel=1e-5)
 
 
+@pytest.mark.parametrize('method,delta_z', [('search', 7), ('first-order', -7)])
+def test_midplane_separation_with_different_input_origins(method, delta_z):
+    root = Path(__file__).parent
+    bottom = ase.io.read(root / 'graphene.xsf')
+    top = ase.io.read(root / 'MoS2.xsf')
+    result, _, _ = HSGenerator(bottom, top, method=method).gen_supercell(5, 30, delta_z)
+    is_bottom = result.numbers == bottom.numbers[0]
+    bottom_z = result.positions[is_bottom, 2]
+    top_z = result.positions[~is_bottom, 2]
+    top_mid = (top_z.min() + top_z.max()) / 2
+    np.testing.assert_allclose(bottom_z, bottom.positions[0, 2], rtol=0, atol=1e-12)
+    assert top_mid - bottom_z[0] == pytest.approx(delta_z)
+    assert np.ptp(top_z) == pytest.approx(np.ptp(top.positions[:, 2]))
+
+
 def test_check_vectors_requires_xy_layer_plane():
     atoms = Atoms('C', cell=[[0, 3, 0], [0, 0, 4], [15, 0, 0]])
     with pytest.raises(ValueError, match='xy plane'):

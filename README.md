@@ -128,6 +128,11 @@ In the CLI, click a point to open its structure and save it with the default
 XSF filename or a path supplied through `-w`. Use `-o` to specify the format
 for that path.
 
+Use `-d` in the CLI or the midplane separation field in the GUI to set the
+signed top-minus-bottom separation in Å before periodic wrapping. The default
+in the CLI is 7 Å. Each layer's midplane is halfway between its minimum and
+maximum z coordinates.
+
 **Python API**
 
 ```python
@@ -142,8 +147,9 @@ for requested_angle, atoms, strain in generator.scan([4, 5, 6], super_z=30, delt
 ```
 
 `gen_supercell` returns strain as a fraction and raises `ValueError` if search
-finds no matching cell. `scan` omits requested angles with no match. Its optional
-`tolerance` argument overrides the generator's strain limit in percent.
+finds no matching cell. Its `delta_z` argument and the one in `scan` set the
+signed midplane separation. The optional `tolerance` argument to `scan` overrides
+the generator's strain limit in percent.
 
 ## Supercell construction benchmark
 

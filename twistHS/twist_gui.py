@@ -107,7 +107,7 @@ def main():
     gr.Number(label="Angle end"),
     gr.Number(label="Angle step"),
     gr.Number(label="z, superlattice constant along z direction"),
-    gr.Number(label="d, distance of two layers"),
+    gr.Number(label="Signed top-minus-bottom midplane separation before wrapping (Å)"),
     gr.Number(label="Max principal strain of either layer (%)"),
     gr.Number(label="Requested angle for visualization (optional)"),
     gr.Checkbox(label="Save Structure", value=False),

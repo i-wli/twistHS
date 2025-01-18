@@ -65,7 +65,10 @@ class HSGenerator:
         return Pyatoms(vectors_super, superatoms_pos, superatoms.numbers)
 
     def gen_supercell(self, theta: float, super_z: float, delta_z: float) -> tuple[Atoms, float, float]:
-        """Return (structure, maximum absolute principal strain, effective angle in degrees)."""
+        """Return (structure, maximum absolute principal strain, effective angle in degrees).
+
+        delta_z is the signed top-minus-bottom midplane separation in Å before wrapping.
+        """
         result = self._generate(theta, super_z, delta_z, self.tolerance)
         if result is None:
             raise ValueError(f"No coincidence cell at {theta:g}° within the search limits")
@@ -105,7 +108,11 @@ class HSGenerator:
 
         bottom_super = self._coincidence(vectors, vectors_b, tran_2D_b, self.bottom)
         top_super = self._coincidence(vectors, vectors_t, tran_2D_t, top_rot)
-        top_super.positions[..., 2] = top_super.positions[..., 2] + delta_z
+        bottom_z = bottom_super.positions[:, 2]
+        top_z = top_super.positions[:, 2]
+        bottom_mid = (bottom_z.min() + bottom_z.max()) / 2
+        top_mid = (top_z.min() + top_z.max()) / 2
+        top_z += bottom_mid + delta_z - top_mid
         positions = np.vstack((bottom_super.positions, top_super.positions))
         number = np.hstack((bottom_super.atomic_numbers, top_super.atomic_numbers))
         results = py_atoms_to_ase_atoms(Pyatoms(vectors, positions, number))
@@ -116,6 +123,7 @@ class HSGenerator:
         """Return (requested angle, structure, strain) entries for matched angles.
 
         Each structure carries its effective angle as info["theta_eff"].
+        delta_z is the signed top-minus-bottom midplane separation in Å before wrapping.
         """
         tolerance = self.tolerance if tolerance is None else tolerance
         validate_tolerance(tolerance)
@@ -154,7 +162,8 @@ def get_parser():
                         help='maximum total atom count for search (default: %(default)s)')
     parser.add_argument('-mo', '--max-order', type=int, help='reciprocal length cutoff for higher-order analysis (integer >= 1)')
     parser.add_argument('-z', help='superlattice constant along z direction, default = 30 A', type=float, default = 30.0)
-    parser.add_argument('-d', help='distance of two layers, default = 7 A', type=float, default = 7.0)
+    parser.add_argument('-d', help='signed top-minus-bottom midplane separation before wrapping (Å, default: %(default)s)',
+                        type=float, default=7.0)
     parser.add_argument('-w','--write', help='Path to write supercell, need to be recognized by ASE')
     parser.add_argument('-o','--outformat', help='output file-format, like lammps-data', default = None)
     return parser
