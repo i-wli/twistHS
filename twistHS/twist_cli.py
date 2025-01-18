@@ -62,7 +62,7 @@ def main():
 
     twistSupercell = HSGenerator(bottom, top, method=args.method, tolerance=args.tolerance,
                                 angle_tol=args.angle_tol, moire_tol=args.moire_tol,
-                                max_atoms=args.max_atoms, backend=args.backend)
+                                moire_order=args.moire_order, max_atoms=args.max_atoms, backend=args.backend)
 
     if args.alist is None:
         angles = args.angle

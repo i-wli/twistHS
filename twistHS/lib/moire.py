@@ -8,7 +8,7 @@ Appl. 6, 48 (2022), doi:10.1038/s41699-022-00321-9.
 
 from dataclasses import dataclass, replace
 from itertools import product
-from math import gcd
+from math import gcd, isfinite
 
 import numpy as np
 
@@ -163,52 +163,66 @@ class MoireComponent:
     multiplicity: int = 1
 
 
+def _component_pairs(A_b, A_t, max_order):
+    """Return ungrouped reciprocal components from both nearest-pair directions."""
+    if not isfinite(max_order) or max_order < 1:
+        raise ValueError("max_order must be finite and at least 1")
+    B_b, U_b = reduce_basis(reciprocal_2d(A_b))
+    B_t, U_t = reduce_basis(reciprocal_2d(A_t))
+    bases = (B_b, B_t)
+    shortest = np.linalg.norm([B_b[0], B_t[0]], axis=1)
+    cutoffs = float(max_order) * shortest * (1 + 1e-10)
+    components = []
+    seen = set()
+    for source, target in ((0, 1), (1, 0)):
+        radius = int(np.ceil(cutoffs[source] / np.linalg.svd(bases[source], compute_uv=False)[-1]))
+        for index in product(range(-radius, radius + 1), repeat=2):
+            if not any(index):
+                continue
+            vector = index @ bases[source]
+            length = np.linalg.norm(vector)
+            if length > cutoffs[source]:
+                continue
+            nearest = nearest_lattice_vector(vector, bases[target])
+            if not np.any(nearest) or gcd(*index, *nearest) > 1:
+                continue
+            other = nearest @ bases[target]
+            other_length = np.linalg.norm(other)
+            if other_length > cutoffs[target]:
+                continue
+            if source == 0:
+                n, m, G_b, G_t = np.asarray(index), nearest, vector, other
+            else:
+                n, m, G_b, G_t = nearest, np.asarray(index), other, vector
+            # Choose one of ±G by its Cartesian direction, independent of basis.
+            if G_b[0] < -1e-12 * shortest[0] or (abs(G_b[0]) <= 1e-12 * shortest[0] and G_b[1] < 0):
+                n, m, G_b, G_t = -n, -m, -G_b, -G_t
+            key = (tuple(n), tuple(m))
+            if key in seen:
+                continue
+            seen.add(key)
+            q = G_b - G_t
+            q_length = np.linalg.norm(q)
+            zero = q_length <= 1e-12 * max(shortest)
+            components.append(MoireComponent(
+                order=float(max(length / shortest[source], other_length / shortest[target])),
+                n=tuple(map(int, n @ U_b)),
+                m=tuple(map(int, m @ U_t)),
+                q=q,
+                period=float('inf') if zero else float(2 * np.pi / q_length),
+                angle_deg=float('nan') if zero else float(np.degrees(np.arctan2(q[1], q[0])) % 360),
+            ))
+    return components
+
+
 def moire_components(A_b, A_t, max_order):
-    """Analyze primitive nearest-pair components within reciprocal length cutoffs.
+    """Analyze primitive nearest-pair components starting from both layers.
 
     Each layer's cutoff is max_order times its shortest reciprocal length.
     Harmonics and ± duplicates are removed. Equal-order, equal-period pairs
     are grouped with their multiplicity; this does not predict intensity.
     """
-    if not np.isfinite(max_order) or max_order < 1:
-        raise ValueError("max_order must be finite and at least 1")
-    B_b, U_b = reduce_basis(reciprocal_2d(A_b))
-    B_t, U_t = reduce_basis(reciprocal_2d(A_t))
-    b_min, t_min = np.linalg.norm(B_b[0]), np.linalg.norm(B_t[0])
-    cutoff = max_order * b_min
-    radius = int(np.ceil(cutoff / np.linalg.svd(B_b, compute_uv=False)[-1]))
-    components = []
-    for index in product(range(-radius, radius + 1), repeat=2):
-        n = np.array(index)
-        if not np.any(n):
-            continue
-        G_b = n @ B_b
-        # Choose one of ±G by its Cartesian direction, independent of basis.
-        if G_b[0] < -1e-12 * b_min or (abs(G_b[0]) <= 1e-12 * b_min and G_b[1] < 0):
-            continue
-        if np.linalg.norm(G_b) > cutoff * (1 + 1e-10):
-            continue
-        m = nearest_lattice_vector(G_b, B_t)
-        if not np.any(m):
-            continue
-        G_t = m @ B_t
-        if np.linalg.norm(G_t) > max_order * t_min * (1 + 1e-10):
-            continue
-        if gcd(*map(int, np.concatenate((n, m)))) > 1:
-            continue
-        q = G_b - G_t
-        q_length = np.linalg.norm(q)
-        zero = q_length <= 1e-12 * max(b_min, t_min)
-        component = MoireComponent(
-            order=float(max(np.linalg.norm(G_b) / b_min, np.linalg.norm(G_t) / t_min)),
-            n=tuple(map(int, n @ U_b)),
-            m=tuple(map(int, m @ U_t)),
-            q=q,
-            period=float('inf') if zero else float(2 * np.pi / q_length),
-            angle_deg=float('nan') if zero else float(np.degrees(np.arctan2(q[1], q[0])) % 360),
-        )
-        components.append(component)
-
+    components = _component_pairs(A_b, A_t, max_order)
     components.sort(key=lambda c: (round(c.order, 10), -c.period, c.angle_deg))
     grouped = []
     for component in components:

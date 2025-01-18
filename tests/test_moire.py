@@ -1,8 +1,11 @@
+from pathlib import Path
+
+import ase.io
 import numpy as np
 import pytest
 
 from twistHS.lib.moire import (
-    deformation, moire_components, moire_lattice, nearest_lattice_vector,
+    _component_pairs, deformation, moire_components, moire_lattice, nearest_lattice_vector,
     principal_strains, reciprocal_2d, reduce_basis, supercell_matrices,
 )
 
@@ -110,6 +113,29 @@ def test_higher_index_sqrt_three_component():
     assert c.multiplicity == 3
     with pytest.raises(ValueError, match='one-to-one first-order pairing'):
         supercell_matrices(bottom, top)
+
+
+def test_graphene_mos2_components_are_invariant_under_layer_exchange():
+    root = Path(__file__).parent
+    bottom, top = [ase.io.read(root / name).cell[:2, :2] for name in ('graphene.xsf', 'MoS2.xsf')]
+    forward = moire_components(bottom, top, 4)
+    reverse = moire_components(top, bottom, 4)
+    for groups in (forward, reverse):
+        assert any(np.isclose(c.order, np.sqrt(7)) for c in groups)
+    np.testing.assert_allclose(
+        [(c.order, c.period, c.multiplicity) for c in forward],
+        [(c.order, c.period, c.multiplicity) for c in reverse],
+    )
+
+    def unsigned_indices(n, m):
+        indices = n + m
+        return min(indices, tuple(-i for i in indices))
+
+    pairs = _component_pairs(bottom, top, 4)
+    swapped = _component_pairs(top, bottom, 4)
+    assert len(pairs) == len(swapped) == sum(c.multiplicity for c in forward)
+    assert len(pairs) == len({unsigned_indices(c.n, c.m) for c in pairs})
+    assert {unsigned_indices(c.n, c.m) for c in pairs} == {unsigned_indices(c.m, c.n) for c in swapped}
 
 
 @pytest.mark.parametrize('U,V', [

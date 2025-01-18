@@ -136,6 +136,21 @@ def test_main_applies_moire_tolerance(monkeypatch):
         main()
 
 
+def test_main_applies_moire_order_independently_of_analysis_cutoff(monkeypatch):
+    from twistHS.twist_cli import main
+    root = Path(__file__).parent
+    monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', str(root / 'graphene.xsf'),
+                        '-t', str(root / 'MoS2.xsf'), '-a', '0', '--max-atoms', '1000', '--max-order', '1'])
+    with patch('twistHS.twist_cli.StructureVisualizer') as visualizer, patch('matplotlib.pyplot.show'):
+        main()
+    _, _, _, _, results = visualizer.call_args.args
+    assert [len(result) for result, _ in results] == [755]
+
+    monkeypatch.setattr(sys, 'argv', sys.argv + ['--moire-order', '4.0'])
+    with pytest.raises(SystemExit, match='No structure within the configured limits'):
+        main()
+
+
 def test_main_no_structure_within_tolerance(monkeypatch):
     from twistHS.twist_cli import main
     root = Path(__file__).parent

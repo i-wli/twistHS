@@ -1,11 +1,12 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import ase.io
 import numpy as np
 import matplotlib.pyplot as plt
 
 from twistHS.lib.algorithm import HSGenerator
-from twistHS.twist_gui import StructureVisualizer
+from twistHS.twist_gui import StructureVisualizer, main_interface
 
 
 def test_filtered_angles_stay_aligned(tmp_path):
@@ -41,3 +42,15 @@ def test_no_results():
     top = ase.io.read(root / 'MoS2.xsf')
     handler = StructureVisualizer(bottom, top, 30, 7)
     assert handler.generate_initial_plot(5, 6, 1, 0) == (None, None, None)
+
+
+def test_gui_and_python_api_apply_moire_order():
+    root = Path(__file__).parent
+    bottom, top = [SimpleNamespace(name=str(root / name)) for name in ('graphene.xsf', 'MoS2.xsf')]
+    generator = HSGenerator(ase.io.read(bottom.name), ase.io.read(top.name), moire_order=4)
+    protected, _, theta_eff = generator.gen_supercell(0, 30, 7)
+    assert len(protected) == 1027
+
+    _, figure, _, _ = main_interface(bottom, top, 0, 1, 1, 30, 7, 1, None, False, None, moire_order=4)
+    np.testing.assert_allclose(figure.axes[0].collections[0].get_offsets(), [[theta_eff, len(protected)]])
+    plt.close(figure)

@@ -12,9 +12,9 @@ are rounded to nine decimal places for ranking.
   layers. The default is 1%.
 - `--angle-tol` limits the difference between requested and effective twist.
   The default is 0.1°.
-- `--moire-tol` limits the relative change of moiré wave vectors in any
-  direction. It accepts percentages from 0% up to 100%, exclusive, and
-  defaults to 5%.
+- `--moire-tol` limits the relative change of first-order moiré wave-vector
+  combinations and any enabled higher-order wave vectors. It accepts
+  percentages from 0% up to 100%, exclusive, and defaults to 5%.
 - `--max-atoms` limits the total number of atoms. The default is 12,000.
 
 Both layers deform into their average cell `C`. The right polar decomposition
@@ -24,12 +24,18 @@ values minus one give the engineering strains. The effective twist is
 
 At the requested angle, the search pairs each layer's two reduced reciprocal
 basis vectors with their nearest vectors in the other layer. This gives two
-sets of reference moiré wave vectors. For each set, deformation may change
-any linear combination of its wave vectors by at most the specified
+sets of first-order reference moiré wave vectors. For each set, deformation
+may change any linear combination of its wave vectors by at most the specified
 percentage of the combination's original length, up to numerical roundoff.
 This limits changes in both length and direction and keeps a two-dimensional
-reference from collapsing into stripes. Angles with no cell within the four
-limits are omitted from scans.
+reference from collapsing into stripes.
+
+`--moire-order K` sets the reciprocal length cutoff for search protection
+in units of each layer's shortest reciprocal length. The default `1.0` uses
+the first-order constraint alone. A finite value above 1 applies the same
+`--moire-tol` to the relative change of each finite-period higher-order wave
+vector within the cutoff. Scans omit angles with no cell that meets the limits
+within the atom budget.
 
 `--method first-order` reproduces the v1 rounding approach for aligned
 primitive bases. It pairs the reduced bottom reciprocal vectors with their
@@ -40,10 +46,11 @@ moiré geometry, invalid pairing, and singular rounded cells raise errors.
 [Hermann (2012)](https://doi.org/10.1088/0953-8984/24/31/314210)
 
 `-mo K` / `--max-order K` additionally prints higher-index reciprocal components
-for every requested angle. Each nonzero bottom vector is paired with its nearest
-top vector; pairs with a zero top vector are discarded. Both vectors must lie
-within `K` times their layer's shortest reciprocal length. Harmonics and ±
-duplicates are removed. The table reports
+for every requested angle. In each layer, the analysis pairs every nonzero
+vector within the cutoff with its nearest vector in the other layer. It combines
+both sets and keeps pairs whose two vectors are nonzero and within `K` times
+their respective layer's shortest reciprocal length. Harmonics and ± duplicates
+are removed. The table reports
 input-basis indices, Cartesian `q = G_b - G_t`, `2π/|q|`, direction, geometric
 order (1, √3, …), and multiplicity of equal-order, equal-period ± pairs. Zero `q`
 has infinite period and undefined direction (`nan`). This analysis follows the
@@ -110,6 +117,9 @@ structures that pass a 0.5% strain tolerance:
 ```
 twist_cli -b tests/graphene.xsf -t tests/MoS2.xsf -al 0 10 1 -tol 0.5 -mo 2
 ```
+Use `--moire-order 4` to enable search protection through order 4 independently
+of the analysis table.
+
 This should open a matplotlib interface:
 ![image](https://github.com/i-wli/twistHS/blob/main/docs/cli.gif)
 
@@ -125,6 +135,7 @@ Once the GUI is open, you should see:
 ![image](https://github.com/i-wli/twistHS/blob/main/docs/gui.gif)
 
 The GUI uses the requested angle to select or save an individual structure.
+Use the moiré order cutoff field to enable higher-order protection.
 In the CLI, click a point to open its structure and save it with the default
 XSF filename or a path supplied through `-w`. Use `-o` to specify the format
 for that path.
@@ -141,7 +152,8 @@ from ase.io import read
 from twistHS.lib.algorithm import HSGenerator
 
 generator = HSGenerator(read("tests/graphene.xsf"), read("tests/MoS2.xsf"),
-                        tolerance=1.0, angle_tol=0.1, moire_tol=5.0, max_atoms=12_000)
+                        tolerance=1.0, angle_tol=0.1, moire_tol=5.0,
+                        moire_order=4.0, max_atoms=12_000)
 atoms, strain, theta_eff = generator.gen_supercell(5, super_z=30, delta_z=7)
 for requested_angle, atoms, strain in generator.scan([4, 5, 6], super_z=30, delta_z=7):
     print(requested_angle, atoms.info["theta_eff"], len(atoms), 100 * strain)

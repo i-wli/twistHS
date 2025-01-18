@@ -1,5 +1,6 @@
 from contextlib import nullcontext
 from itertools import product
+from math import gcd
 from pathlib import Path
 
 import ase.io
@@ -12,10 +13,11 @@ from twistHS.lib.coincidence import (
     _evaluate,
     _matches,
     _moire_projection,
+    _moire_rows,
     _search_bounds,
     find_coincidence,
 )
-from twistHS.lib.moire import nearest_lattice_vector, reciprocal_2d, reduce_basis
+from twistHS.lib.moire import _component_pairs, nearest_lattice_vector, reciprocal_2d, reduce_basis
 
 
 @pytest.fixture(params=["numpy", "jax"])
@@ -77,12 +79,46 @@ def deformed_difference(G_b, G_t, B, T):
             - G_t @ (np.linalg.inv(C) @ T).swapaxes(-1, -2))
 
 
-def brute_pairs(bottom, top, budget, tolerance, angle_tol, moire_tol):
+def higher_order_references(bottom, top, cutoff):
+    if cutoff == 1:
+        return np.empty((2, 0, 2))
+    # The cells used here bound the length of a nearest vector by twice the
+    # source cutoff (zero is always a candidate), so coefficients fit in ±12.
+    indices = np.array(list(product(range(-12, 13), repeat=2)))
+    G = [indices @ reciprocal_2d(layer) for layer in (bottom, top)]
+    lengths = [np.linalg.norm(vectors, axis=1) for vectors in G]
+    shortest = [length[length > 0].min() for length in lengths]
+    orders = [length / unit for length, unit in zip(lengths, shortest)]
+    pairs = set()
+    for source, target in ((0, 1), (1, 0)):
+        for i in np.flatnonzero((orders[source] > 0) & (orders[source] <= cutoff * (1 + 1e-10))):
+            j = np.argmin(np.linalg.norm(G[target] - G[source][i], axis=1))
+            if not 0 < orders[target][j] <= cutoff * (1 + 1e-10) or gcd(*indices[i], *indices[j]) > 1:
+                continue
+            if max(orders[source][i], orders[target][j]) <= 1 + 1e-10:
+                continue
+            if np.linalg.norm(G[source][i] - G[target][j]) <= 1e-12 * max(shortest):
+                continue
+            pair = (i, j) if source == 0 else (j, i)
+            # The ordered grid puts a vector and its negative at opposite offsets.
+            opposite = tuple(len(indices) - 1 - k for k in pair)
+            pairs.add(min(pair, opposite))
+    return np.array([(G[0][i], G[1][j]) for i, j in sorted(pairs)]).reshape(-1, 2, 2).swapaxes(0, 1)
+
+
+def higher_order_errors(G_b, G_t, B, T):
+    Q = G_b - G_t
+    deformed = deformed_difference(G_b, G_t, B, T)
+    return np.linalg.norm(deformed - Q, axis=-1) / np.linalg.norm(Q, axis=-1)
+
+
+def brute_pairs(bottom, top, budget, tolerance, angle_tol, moire_tol, moire_order):
     # For these test inputs, the stretch bounds give top coefficient magnitude
     # below 11 for every row of a bottom HNF of determinant at most 4.
     candidates = np.array(list(product(range(-10, 11), repeat=4))).reshape(-1, 2, 2)
     det_t = np.rint(np.linalg.det(candidates))
     references = [(G_b, G_t, G_b - G_t) for G_b, G_t in reciprocal_pairs(bottom, top)]
+    higher = higher_order_references(bottom, top, moire_order)
     for a, d in product(range(1, budget), repeat=2):
         if a * d >= budget:
             continue
@@ -104,6 +140,7 @@ def brute_pairs(bottom, top, budget, tolerance, angle_tol, moire_tol):
                 deformed = deformed_difference(G_b, G_t, B, valid_top)
                 error = np.linalg.norm(np.linalg.solve(Q, deformed - Q), ord=2, axis=(-2, -1))
                 moire_ok &= error <= moire_tol
+            moire_ok &= np.all(higher_order_errors(*higher, B, valid_top) <= moire_tol, axis=-1)
             for m in top_matrices[positive][valid][moire_ok]:
                 yield H, m
 
@@ -112,15 +149,17 @@ def pair_key(bottom, top):
     return (*bottom.ravel(), *top.ravel())
 
 
-@pytest.mark.parametrize('top,tolerance,angle_tol,moire_tol,pair_count', [
-    (np.eye(2) * 0.68, 0.20, 0.01, 0.90, 1),
-    (np.array([[0.505, 0.002], [-0.003, 0.507]]), 0.20, 12, 0.05, 0),
-    (np.array([[0.89, 0.12], [0.16, 1.02]]), 0.20, 12, 0.05, 0),
+@pytest.mark.parametrize('top,tolerance,angle_tol,moire_tol,moire_order,pair_count', [
+    (np.eye(2) * 0.68, 0.20, 0.01, 0.90, 1, 1),
+    (np.eye(2) * 0.68, 0.20, 0.01, 0.90, 1.5, 1),
+    (np.eye(2) * 0.68, 0.20, 0.01, 0.90, 3, 0),
+    (np.array([[0.505, 0.002], [-0.003, 0.507]]), 0.20, 12, 0.05, 1, 0),
+    (np.array([[0.89, 0.12], [0.16, 1.02]]), 0.20, 12, 0.05, 1, 0),
 ])
-def test_complete_search_against_brute_force(top, tolerance, angle_tol, moire_tol, pair_count, backend):
+def test_complete_search_against_brute_force(top, tolerance, angle_tol, moire_tol, moire_order, pair_count, backend):
     bottom = np.eye(2)
     budget = 5
-    expected = list(brute_pairs(bottom, top, budget, tolerance, angle_tol, moire_tol))
+    expected = list(brute_pairs(bottom, top, budget, tolerance, angle_tol, moire_tol, moire_order))
     assert len(expected) == pair_count
     kernels, precision = {}, nullcontext
     if backend == "jax":
@@ -129,11 +168,12 @@ def test_complete_search_against_brute_force(top, tolerance, angle_tol, moire_to
         kernels = {"boxes": _coincidence_jax.boxes, "evaluate": _coincidence_jax.evaluate}
         precision = _coincidence_jax.enable_x64
     projection = _moire_projection(bottom, top, moire_tol)
+    rows = _moire_rows(bottom, top, moire_tol, moire_order)
     radius, area_bounds = _search_bounds(bottom, top, tolerance, angle_tol, projection)
     with precision():
         actual = list(_matches(1, budget - 1, bottom, top, (np.eye(2, dtype=int),) * 2,
                                (1, 1), tolerance, angle_tol, budget, radius, area_bounds,
-                               projection, **kernels))
+                               projection, rows, **kernels))
 
     # Convert each reduced bottom basis back to its HNF, applying the same
     # unimodular row transform to the top matrix before comparing pairs.
@@ -152,7 +192,7 @@ def test_complete_search_against_brute_force(top, tolerance, angle_tol, moire_to
     assert keys == {pair_key(h, m) for h, m in expected}
     match = find_coincidence(bottom, top, (1, 1), tolerance=100 * tolerance,
                              angle_tol=angle_tol, moire_tol=100 * moire_tol,
-                             max_atoms=budget, backend=backend)
+                             moire_order=moire_order, max_atoms=budget, backend=backend)
     if not expected:
         assert match is None
         return
@@ -215,7 +255,7 @@ def test_zero_and_rank_one_moire(backend, evaluation):
     M_t = np.array([np.diag([4, 101])])
     projection = _moire_projection(bottom, top, 0.05)
     with precision():
-        strain, offset, feasible = evaluate(M_b, M_t, bottom, top, 0.03, projection)
+        strain, offset, feasible = evaluate(M_b, M_t, bottom, top, 0.03, projection, np.empty((0, 2)))
     assert strain[0] < 0.01
     assert offset[0] == 0
     assert not feasible[0]
@@ -237,7 +277,7 @@ def test_all_directions_reject_strip_collapse(evaluation):
     evaluate, precision = evaluation
     projection = _moire_projection(bottom, top, 0.05)
     with precision():
-        strain, offset, feasible = evaluate(M_b, M_t, bottom, top, 0.03, projection)
+        strain, offset, feasible = evaluate(M_b, M_t, bottom, top, 0.03, projection, np.empty((0, 2)))
     assert strain[0] < 0.01
     assert abs(offset[0]) < 0.1
     assert not feasible[0]
@@ -284,9 +324,38 @@ def test_small_angle_graphene_moire(backend):
                 assert np.linalg.matrix_rank(deformed) == 2
 
 
+def test_higher_order_protection_omits_infinite_periods():
+    bottom = np.eye(2)
+    top = (2 / 3) * bottom
+    higher = [c for c in _component_pairs(bottom, top, 3) if c.order > 1]
+    assert any(np.isinf(c.period) for c in higher)
+    rows = _moire_rows(bottom, top, 0.05, 3)
+    assert rows.shape == (sum(np.isfinite(c.period) for c in higher), 2)
+
+
+@pytest.mark.parametrize('theta,default_error', [(0, 0.08424), (5, 0.11000)])
+def test_graphene_mos2_higher_order_protection(theta, default_error, backend):
+    root = Path(__file__).parent
+    graphene = ase.io.read(root / "graphene.xsf")
+    mos2 = ase.io.read(root / "MoS2.xsf")
+    mos2.rotate(theta, "z", rotate_cell=True)
+    bottom, top = graphene.cell[:2, :2], mos2.cell[:2, :2]
+    counts = (len(graphene), len(mos2))
+    references = higher_order_references(bottom, top, 4)
+
+    default = find_coincidence(bottom, top, counts, backend=backend)
+    protected = find_coincidence(bottom, top, counts, moire_order=4, backend=backend)
+    assert default is not None and protected is not None
+    assert default.atom_count < protected.atom_count <= 12_000
+    assert higher_order_errors(*references, default.bottom @ bottom, default.top @ top).max() == pytest.approx(
+        default_error, abs=1e-5)
+    assert np.all(higher_order_errors(*references, protected.bottom @ bottom, protected.top @ top) <= 0.05)
+
+
 @pytest.mark.parametrize('kwargs', [
     {'tolerance': -1}, {'angle_tol': np.inf}, {'max_atoms': 4.5}, {'backend': 'gpu'},
     {'moire_tol': -1}, {'moire_tol': 100}, {'moire_tol': np.nan},
+    {'moire_order': 0.99}, {'moire_order': np.inf}, {'moire_order': np.nan}, {'moire_order': 1 + 1j},
 ])
 def test_invalid_search_limits(kwargs):
     with pytest.raises(ValueError, match=next(iter(kwargs))):
