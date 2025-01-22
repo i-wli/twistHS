@@ -172,7 +172,7 @@ the generator's strain limit in percent.
 ## JAX benchmark
 
 On an NVIDIA A100, JAX sped up full supercell generation by 2.02–2.33× over
-single-core NumPy after warm-up in the [two benchmark cases](docs/benchmark-search.md).
+single-core NumPy after warm-up in the [two benchmark cases](docs/benchmark-jax.md).
 
 ## Supercell construction benchmark
 
@@ -180,7 +180,7 @@ On an Apple M1 with 8 GB of RAM, vectorized atom placement cut the median
 time to build both layers of a 1,316,056-atom twisted graphene supercell
 from 614.75 s to 0.1545 s. Median peak process memory fell
 from 499.0 MiB to 377.6 MiB.
-The [benchmark report](docs/benchmarks.md) covers the 5° to 0.1° sweep and
+The [benchmark report](docs/benchmark-build.md) covers the 5° to 0.1° sweep and
 provides the raw measurements and reproduction commands.
 
 ![Build time and peak process memory by atom count](docs/benchmark-build.png)

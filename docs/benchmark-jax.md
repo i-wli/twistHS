@@ -5,7 +5,7 @@ generation after warm-up by **1.70× for twisted bilayer graphene** and
 **1.84× for graphene/hBN**. On an NVIDIA A100, the speedups were **2.02×**
 and **2.33×**, respectively.
 
-![Median supercell generation times for NumPy, JAX CPU and JAX A100. For twisted bilayer graphene at 5°, the times are 115.7, 67.9 and 57.2 ms. For graphene/hBN at 0.5°, they are 21.81, 11.86 and 9.35 s.](benchmark-search-timing.png)
+![Median supercell generation times for NumPy, JAX CPU and JAX A100. For twisted bilayer graphene at 5°, the times are 115.7, 67.9 and 57.2 ms. For graphene/hBN at 0.5°, they are 21.81, 11.86 and 9.35 s.](benchmark-jax.png)
 
 JAX uses just-in-time compilation for the batched coincidence search kernels.
 For twisted bilayer graphene, the first generation call took **117 ms** on
@@ -28,9 +28,9 @@ is the NumPy median divided by the configuration's median for the same case.
 ## Recreate the figure
 
 From the repository root with twistHS installed, plot the
-[measured timings](benchmark-search-summary.csv).
+[measured timings](benchmark-jax.csv).
 
 ```sh
-python -m benchmarks.bench_search plot docs/benchmark-search-summary.csv \
-    --output docs/benchmark-search-timing.png
+python -m benchmarks.bench_search plot docs/benchmark-jax.csv \
+    --output docs/benchmark-jax.png
 ```
