@@ -275,7 +275,7 @@ def test_search_scan_effective_angle_and_no_match(test_structures):
     assert structure.info["theta_eff"] == pytest.approx(21.7867893, abs=1e-7)
     assert len(structure) == 28
     assert 0 < strain < 1e-6
-    with pytest.raises(ValueError, match='No coincidence cell at 5'):
+    with pytest.raises(ValueError, match='No commensurate supercell at a requested twist angle of 5'):
         generator.gen_supercell(5, 30, 7)
     with pytest.raises(ValueError, match='theta'):
         generator.scan([0, np.nan], 30, 7)

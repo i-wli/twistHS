@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "twistHS"
 version = "1.4.0"
-description = "A package for twisted heterostructure generation"
+description = "Construction and geometric analysis of commensurate moiré supercells for twisted van der Waals bilayers"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {file = "LICENSE"}

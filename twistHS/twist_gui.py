@@ -1,136 +1,155 @@
-from decimal import Decimal
-from math import ceil
+from tempfile import TemporaryDirectory, mkdtemp
 
-import numpy as np
-import ase.io
-import matplotlib.pyplot as plt
 import gradio as gr
-from ase.visualize.plot import plot_atoms
+from matplotlib.figure import Figure
 
-from twistHS.lib.algorithm import HSGenerator
-from twistHS.lib.coincidence import DEFAULT_MOIRE_ORDER, DEFAULT_MOIRE_TOL, SEARCH_BACKENDS
+from twistHS.lib.algorithm import (
+    CONSTRUCTION_METHODS,
+    DEFAULT_DELTA_Z,
+    DEFAULT_SUPER_Z,
+    DESCRIPTION,
+)
+from twistHS.lib.coincidence import (
+    DEFAULT_ANGLE_TOL,
+    DEFAULT_MAX_ATOMS,
+    DEFAULT_MOIRE_ORDER,
+    DEFAULT_MOIRE_TOL,
+    DEFAULT_TOLERANCE,
+    SEARCH_BACKENDS,
+)
+from twistHS.lib.workflow import (
+    INPUT_ERRORS,
+    MOIRE_HEADERS,
+    NO_SUPERCELLS,
+    STRAIN_LABEL,
+    angle_range,
+    export_structure,
+    plot_scan,
+    plot_structure,
+    positive_integer,
+    run_scan,
+)
 
-class StructureVisualizer:
-    def __init__(self, bottom, top, z, d):
-        self.bottom = bottom
-        self.top = top
-        self.z = z
-        self.d = d
 
-    def generate_initial_plot(self, angle_start, angle_end, angle_step, tolerance, *,
-                              backend="numpy", moire_tol=DEFAULT_MOIRE_TOL, moire_order=DEFAULT_MOIRE_ORDER):
-        start, end, step = (Decimal(str(value)) for value in (angle_start, angle_end, angle_step))
-        angles = [float(start + i * step) for i in range(ceil((end - start) / step))]
-        twistSupercell = HSGenerator(self.bottom, self.top, backend=backend,
-                                     moire_tol=moire_tol, moire_order=moire_order)
-        entries = twistSupercell.scan(angles, self.z, self.d, tolerance)
-        if not entries:
-            return None, None, None
-
-        valid_angles = np.array([angle for angle, _, _ in entries])
-        effective_angles = np.array([result.info["theta_eff"] for _, result, _ in entries])
-        nums = np.array([len(result) for _, result, _ in entries])
-        Deltas = np.array([strain for _, _, strain in entries]) * 100
-        results = [(result, strain) for _, result, strain in entries]
-        fig, ax = plt.subplots()
-        scatter = ax.scatter(effective_angles, nums, c=Deltas, picker=True)
-        plt.colorbar(scatter, label='Max strain (%)')
-        ax.set_xlabel(r'Effective Twist Angle ($^{\circ}$)')
-        plt.ylabel('Number of Atoms')
-        ax.set_title('Atom Count vs Effective Angle')
-        plt.close()
-        return fig, valid_angles, results
-
-    def generate_detailed_structure(self, selected_angle, angles, results):
-        try:
-            ind = angles.tolist().index(selected_angle)
-            result, _ = results[ind]
-            fig, ax = plt.subplots()
-            supercell = result.copy()
-            supercell.wrap()
-            plot_atoms(supercell, ax, scale=2, radii=0.25, rotation=('0x,0y,0z'))
-            ax.set_title(f'Effective angle {result.info["theta_eff"]:.4f}°')
-            ax.set_axis_off()
-            plt.close()
-            return fig
-        except ValueError:
-            return "Angle not in the generated range. Please enter a valid angle."
-    
-    def save_structure(self, selected_angle, angles, results, filename):
-        try:
-            ind = angles.tolist().index(selected_angle)
-            result, _ = results[ind]
-            if not filename:
-                filename = f"structure_{selected_angle:.2f}.xsf"
-            ase.io.write(filename, result)
-            return filename
-        except ValueError:
-            return None
-
-def main_interface(bottom_file, top_file, angle_start, angle_end, angle_step, z, d, tol,
-                   selected_angle, save_option, filename, backend="numpy", moire_tol=DEFAULT_MOIRE_TOL,
-                   moire_order=DEFAULT_MOIRE_ORDER):
-    try:
-        bottom = ase.io.read(bottom_file.name)
-        top = ase.io.read(top_file.name)
-        
-        handler = StructureVisualizer(bottom, top, z, d)
-        initial_plot, angles, results = handler.generate_initial_plot(
-            angle_start, angle_end, angle_step, tol, backend=backend, moire_tol=moire_tol, moire_order=moire_order)
-        if initial_plot is None:
-            return "No valid structures found in the given range.", None, None, None
-        saved_file_path = None
-        
-        if selected_angle is not None:
-            detailed_plot = handler.generate_detailed_structure(selected_angle, angles, results)
-            if isinstance(detailed_plot, plt.Figure) and save_option:
-                saved_file_path = handler.save_structure(selected_angle, angles, results, filename)
-            elif not isinstance(detailed_plot, plt.Figure):
-                return detailed_plot, initial_plot, None, None
-        else:
-            return "Enter a requested angle to view the detailed structure.", initial_plot, None, None
-            
-        
-        if saved_file_path:
-            return "Completed! Structure saved to your local directory", initial_plot, detailed_plot, saved_file_path
-        return "Completed! Structure not saved", initial_plot, detailed_plot, None
-    except SystemExit as e:
-        return str(e), None, None, None
-    except Exception as e:
-        return str(e), None, None, None
-
-def main():
-    iface = gr.Interface(
-    fn=main_interface,
-    inputs=[
-    gr.File(label="Upload bottom layer file"),
-    gr.File(label="Upload top layer file"),
-    gr.Number(label="Angle start"),
-    gr.Number(label="Angle end"),
-    gr.Number(label="Angle step"),
-    gr.Number(label="z, superlattice constant along z direction"),
-    gr.Number(label="Signed top-minus-bottom midplane separation before wrapping (Å)"),
-    gr.Number(label="Max principal strain of either layer (%)"),
-    gr.Number(label="Requested angle for visualization (optional)"),
-    gr.Checkbox(label="Save Structure", value=False),
-    gr.Textbox(label="Filename to save structure, default=structure_angle.xsf"),
-    gr.Dropdown(choices=list(SEARCH_BACKENDS), value="numpy", label="Coincidence search backend"),
-    gr.Number(value=DEFAULT_MOIRE_TOL, label="Max relative moiré wave-vector change (%)",
-              info="Applies to first-order combinations and each enabled higher-order wave vector."),
-    gr.Number(value=DEFAULT_MOIRE_ORDER, label="Moiré order cutoff for search",
-              info="Use 1 for first-order protection. Higher values include finite-period components up to the cutoff."),
-    ],
-    outputs=[
-    gr.Textbox(label="Status"),
-    gr.Plot(label="Initial Scatter Plot"),
-    gr.Plot(label="Selected Structure View"),
-    gr.File(label="Download Structure")
-    ],
-    title="Twisted vdWHS Visualization",
-    description="Generate and visualize twisted van der Waals heterostructures."
+def scan_bilayer(bottom, top, start, stop, step, z, d, tolerance, method,
+                 angle_tol, moire_tol, moire_order, max_atoms, backend, max_order):
+    if bottom is None or top is None:
+        raise ValueError("Supply the lower- and upper-layer primitive cells.")
+    if None in (tolerance, angle_tol, moire_tol, moire_order):
+        raise ValueError("Specify the maximum strain, maximum twist-angle deviation, maximum relative change in "
+                         "moiré wave vectors, and reciprocal cutoff for the moiré constraint.")
+    return run_scan(
+        bottom, top, angle_range(start, stop, step), z, d,
+        method=method, tolerance=tolerance, angle_tol=angle_tol,
+        moire_tol=moire_tol, moire_order=moire_order,
+        max_atoms=positive_integer(max_atoms, "The maximum number of atoms per supercell"),
+        backend=backend, max_order=max_order,
     )
 
-    iface.launch(inbrowser=True)
 
-if __name__ == '__main__':
+def preview_supercell(index, entries):
+    if index is None:
+        return None, None, ""
+    figure = Figure(layout="constrained")
+    plot_structure(entries[index], figure.subplots())
+    return figure, None, ""
+
+
+def build_interface(download_directory):
+    def scan(*inputs):
+        try:
+            *settings, cutoff = inputs
+            try:
+                max_order = int(cutoff) if cutoff.strip() else None
+            except ValueError as error:
+                raise ValueError("The reciprocal cutoff for moiré component analysis must be a positive integer.") from error
+            entries, rows = scan_bilayer(*settings, max_order)
+        except INPUT_ERRORS as error:
+            return str(error), None, gr.update(value=[], visible=False), [], gr.update(choices=[], value=None), None, None, ""
+        figure = None
+        status = NO_SUPERCELLS
+        if entries:
+            figure = Figure(layout="constrained")
+            plot_scan(entries, figure.subplots())
+            status = f"Commensurate supercells found: {len(entries)}."
+        if max_order is not None and not rows:
+            status += " No reciprocal-lattice vector pairs satisfy the analysis cutoff."
+        choices = [(f"{i + 1}. {entry.label}", str(i)) for i, entry in enumerate(entries)]
+        return (status, figure, gr.update(value=rows, visible=max_order is not None), entries,
+                gr.update(choices=choices, value=None), None, None, "")
+
+    def export(index, entries, filename, outformat):
+        if index is None:
+            return None, "Select a commensurate supercell to export."
+        try:
+            directory = mkdtemp(dir=download_directory)
+            path = export_structure(entries[index], filename.strip(), outformat.strip(), directory=directory)
+        except INPUT_ERRORS as error:
+            return None, f"Supercell export failed. {error}"
+        return str(path), f"Prepared {path.name} for download."
+
+    with gr.Blocks(title="twistHS · Commensurate moiré supercells") as interface:
+        gr.Markdown(f"# twistHS\n{DESCRIPTION}")
+        with gr.Row():
+            bottom = gr.File(label="Lower-layer primitive cell", type="filepath")
+            top = gr.File(label="Upper-layer primitive cell", type="filepath")
+        with gr.Row():
+            start = gr.Number(label="Start twist angle (°)")
+            stop = gr.Number(label="Stop twist angle (°)", info="The stop angle is excluded.")
+            step = gr.Number(label="Twist-angle step (°)")
+        with gr.Row():
+            z = gr.Number(DEFAULT_SUPER_Z, label="Out-of-plane supercell lattice parameter (Å)")
+            d = gr.Number(DEFAULT_DELTA_Z, label="Interlayer distance (Å)",
+                          info="From the lower- to the upper-layer midplane.")
+            tolerance = gr.Number(DEFAULT_TOLERANCE, label=STRAIN_LABEL,
+                                  info="Largest absolute principal strain in either layer.")
+        with gr.Accordion("Construction and reciprocal-space analysis", open=False):
+            method = gr.Dropdown(CONSTRUCTION_METHODS, value="search", label="Supercell construction method",
+                                 info="Coincidence-lattice search or first-order moiré-cell rounding.")
+            backend = gr.Dropdown(SEARCH_BACKENDS, value="numpy", label="Coincidence-lattice search backend")
+            angle_tol = gr.Number(DEFAULT_ANGLE_TOL, label="Maximum twist-angle deviation (°)",
+                                  info="Deviation between requested and effective twist angles in coincidence-lattice search.")
+            max_atoms = gr.Number(DEFAULT_MAX_ATOMS, label="Maximum number of atoms per supercell",
+                                  info="Applies to coincidence-lattice search.")
+            moire_tol = gr.Number(DEFAULT_MOIRE_TOL, label="Maximum relative change in moiré wave vectors (%)",
+                                  info="Applies to first-order combinations and enabled higher-index wave vectors.")
+            moire_order = gr.Number(DEFAULT_MOIRE_ORDER, label="Reciprocal cutoff for the moiré constraint",
+                                    info="In multiples of the length of each layer’s shortest nonzero reciprocal-lattice vector. "
+                                         "Use 1 for the first-order constraint.")
+            max_order = gr.Textbox(label="Reciprocal cutoff for geometric moiré component analysis",
+                                   placeholder="Leave blank to omit analysis",
+                                   info="Positive integer in multiples of the length of each layer’s shortest "
+                                        "nonzero reciprocal-lattice vector.")
+        submit = gr.Button("Scan twist angles", variant="primary")
+        status = gr.Textbox(label="Scan status", interactive=False)
+        scatter = gr.Plot(label="Commensurate supercells by effective twist angle")
+        analysis = gr.Dataframe(headers=list(MOIRE_HEADERS), datatype="str", label="Geometric moiré components",
+                                interactive=False, visible=False)
+        selection = gr.Dropdown(choices=[], type="index", label="Commensurate supercell", interactive=True)
+        structure = gr.Plot(label="Atomic structure")
+        with gr.Row():
+            filename = gr.Textbox(label="Download filename", placeholder="structure_<requested angle>.xsf")
+            outformat = gr.Textbox(label="ASE output format", info="Optional. An explicit format requires a filename.")
+        download = gr.Button("Prepare supercell download")
+        export_status = gr.Textbox(label="Export status", interactive=False)
+        file = gr.File(label="Supercell download", interactive=False)
+        entries = gr.State([])
+
+        submit.click(
+            scan,
+            [bottom, top, start, stop, step, z, d, tolerance, method, angle_tol, moire_tol, moire_order,
+             max_atoms, backend, max_order],
+            [status, scatter, analysis, entries, selection, structure, file, export_status],
+        )
+        selection.input(preview_supercell, [selection, entries], [structure, file, export_status])
+        download.click(export, [selection, entries, filename, outformat], [file, export_status])
+    return interface
+
+
+def main():
+    with TemporaryDirectory(prefix="twisths-") as download_directory:
+        build_interface(download_directory).launch(inbrowser=True)
+
+
+if __name__ == "__main__":
     main()

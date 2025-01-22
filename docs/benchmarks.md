@@ -1,8 +1,7 @@
 # Supercell construction benchmark
 
-The benchmark builds both layers of twisted bilayer graphene (TBG) at 5°, 2°,
-1°, 0.5°, 0.25°, and 0.1°. Both implementations use the same rounded
-transformation matrices and lattice-point enumeration. The legacy builder
+The benchmark builds both layers of twisted bilayer graphene (TBG) at requested twist angles of 5°, 2°, 1°, 0.5°, 0.25°, and 0.1°. Both implementations
+use the same rounded integer supercell transformation matrices and lattice-point enumeration. The legacy builder
 copies and extends an ASE `Atoms` object at every lattice point. The vectorized
 builder broadcasts the Cartesian positions and tiles the atomic numbers.
 
@@ -14,11 +13,11 @@ and its imported libraries.
 
 ## Results
 
-Measured on an Apple M1 with 8 GB of RAM  (arm64). Values are medians of three
+Measured on an Apple M1 with 8 GB of RAM (arm64). Values are medians of three
 independent trials per implementation and angle. Speedups use unrounded
 median times.
 
-| Twist angle | Total atoms | Legacy time (s) | Vectorized time (s) | Speedup | Legacy peak RSS (MiB) | Vectorized peak RSS (MiB) |
+| Requested twist angle | Total atoms | Legacy time (s) | Vectorized time (s) | Speedup | Legacy peak RSS (MiB) | Vectorized peak RSS (MiB) |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 5° | 508 | 0.00384 | 0.000245 | 15.7× | 83.0 | 83.5 |
 | 2° | 3,268 | 0.0246 | 0.000518 | 47.5× | 85.2 | 85.1 |
@@ -31,7 +30,7 @@ median times.
 
 [Download the individual measurements](benchmark-build.csv).
 
-## Reproduce
+## Reproducing the benchmark
 
 Run from the repository root after installing twistHS. The benchmark uses
 process RSS on macOS and Linux.

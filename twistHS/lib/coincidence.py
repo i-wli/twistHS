@@ -37,19 +37,19 @@ class Coincidence:
 
 def validate_tolerance(tolerance):
     if not np.isfinite(tolerance) or not 0 <= tolerance < 100:
-        raise ValueError("tolerance must be a strain percentage in [0, 100)")
+        raise ValueError("The maximum absolute principal engineering strain (tolerance) must be in [0, 100) percent.")
 
 
 def validate_search_limits(angle_tol, max_atoms, *, moire_tol=DEFAULT_MOIRE_TOL,
                            moire_order=DEFAULT_MOIRE_ORDER):
     if not np.isfinite(angle_tol) or not 0 <= angle_tol <= 180:
-        raise ValueError("angle_tol must be in [0, 180] degrees")
+        raise ValueError("The twist-angle deviation (angle_tol) must be in [0, 180] degrees.")
     if not np.isfinite(moire_tol) or not 0 <= moire_tol < 100:
-        raise ValueError("moire_tol must be a percentage in [0, 100)")
+        raise ValueError("The moiré wave-vector tolerance (moire_tol) must be in [0, 100) percent.")
     if not isinstance(moire_order, Real) or not isfinite(moire_order) or moire_order < 1:
-        raise ValueError("moire_order must be finite and at least 1")
+        raise ValueError("The reciprocal cutoff for the moiré constraint (moire_order) must be finite and at least 1.")
     if isinstance(max_atoms, bool) or not isinstance(max_atoms, (int, np.integer)) or max_atoms < 1:
-        raise ValueError("max_atoms must be a positive integer")
+        raise ValueError("The supercell atom-count limit (max_atoms) must be a positive integer.")
 
 
 def validate_search_backend(backend):
@@ -256,15 +256,16 @@ def _matches(first, last, bottom, top, transforms, counts, tolerance, angle_tol,
 def find_coincidence(A_b, A_t, counts, *, tolerance=DEFAULT_TOLERANCE,
                      angle_tol=DEFAULT_ANGLE_TOL, moire_tol=DEFAULT_MOIRE_TOL,
                      moire_order=DEFAULT_MOIRE_ORDER, max_atoms=DEFAULT_MAX_ATOMS, backend="numpy"):
-    """Return the smallest accepted pair of integer transforms, or None.
+    """Return the integer transformation matrices of the accepted cell with the fewest atoms.
 
     A_t includes the requested twist. Counts give atoms per primitive cell,
     tolerance and moire_tol are percentages, and angle_tol is in degrees.
     moire_tol limits the relative change of any linear combination within
     each of the two first-order reference sets, one starting from each layer.
-    moire_order is a cutoff in units of each layer's shortest reciprocal length.
-    Values above 1 also apply moire_tol to individual finite-period higher-order
-    wave vectors. Select the optional JAX kernels with backend="jax".
+    moire_order is a cutoff in units of each layer's shortest nonzero reciprocal-lattice vector.
+    Values above 1 also apply moire_tol to individual finite-period higher-index
+    wave vectors. Select the optional JAX kernels with backend="jax". The
+    function returns None if no supercell satisfies the specified constraints.
     """
     validate_tolerance(tolerance)
     validate_search_limits(angle_tol, max_atoms, moire_tol=moire_tol, moire_order=moire_order)

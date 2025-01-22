@@ -1,104 +1,97 @@
-import numpy as np
-import ase.io
-from ase.visualize.plot import plot_atoms
 import matplotlib.pyplot as plt
-from matplotlib.collections import PathCollection
-from matplotlib.widgets import Button
+from matplotlib.widgets import Button, RadioButtons
 
-from twistHS.lib.algorithm import get_parser, HSGenerator
+from twistHS.lib.algorithm import get_parser
+from twistHS.lib.workflow import (
+    INPUT_ERRORS,
+    MOIRE_HEADERS,
+    NO_SUPERCELLS,
+    angle_range,
+    export_structure,
+    plot_scan,
+    plot_structure,
+    run_scan,
+)
+
 
 class StructureVisualizer:
-    def __init__(self, angles, bottom, top, args, results):
-        self.current_structure = None
-        self.ang = 0
-        self.num = 0
-        self.Delta = 0
-        self.angles = angles
-        self.bottom = bottom
-        self.top = top
-        self.args = args
-        self.results = results
+    def __init__(self, entries, filename, outformat):
+        self.entries = entries
+        self.filename = filename
+        self.outformat = outformat
+        figure, ax = plt.subplots()
+        self.scatter = plot_scan(entries, ax)
+        figure.canvas.mpl_connect("pick_event", lambda event: self.onpick(event))
 
     def onpick(self, event):
-        if isinstance(event.artist, PathCollection):
-            ind = event.ind[0]
-            self.ang = self.angles[ind]
-            self.current_result, self.Delta = self.results[ind]
-            theta_eff = self.current_result.info["theta_eff"]
-            self.num = len(self.current_result)
-            fig, ax = plt.subplots()
-            supercell = self.current_result.copy()
-            supercell.wrap()
-            plot_atoms(supercell, ax, scale=2, radii=0.3, rotation=('0x,0y,0z'))
-            plt.title(f"Effective angle: {theta_eff:.4f}°, Num: {self.num}, Max strain: {self.Delta*100:.2f}%")
-            ax.set_axis_off()
-            axsave = plt.axes([0.81, 0.05, 0.1, 0.075])
-            btn_save = Button(axsave, 'Save')
-            btn_save.on_clicked(self.save_structure)
-            plt.show()
+        if event.artist is not self.scatter or not len(event.ind):
+            return
+        indices = sorted(event.ind)
+        figure, ax = plt.subplots()
+        figure.subplots_adjust(bottom=0.17)
+        save = Button(figure.add_axes([0.68, 0.04, 0.27, 0.08]), "Export supercell")
+        widgets = [save]
+        selected = indices[0]
 
-    def save_structure(self, event):
-        if self.current_result is not None:
-            filename = self.get_filename()
-            outformat = self.args.outformat if self.args.write is not None else None
-            self.current_result.write(filename, format=outformat)
-            print(f"Structure saved as {filename}")
-        else:
-            print("No structure to save")
+        def update(index):
+            nonlocal selected
+            selected = index
+            ax.clear()
+            plot_structure(self.entries[selected], ax)
+            figure.canvas.draw_idle()
 
-    def get_filename(self):
-        if self.args.write is None:
-            return f"Super_{self.ang:.2f}_{self.num}.xsf"
-        else:
-            return self.args.write
+        def save_selected(_event):
+            try:
+                path = export_structure(self.entries[selected], self.filename, self.outformat)
+            except INPUT_ERRORS as error:
+                print(f"Supercell export failed. {error}")
+            else:
+                print(f"Exported supercell to {path}")
+
+        if len(indices) > 1:
+            figure.subplots_adjust(left=0.4)
+            choice_ax = figure.add_axes([0.02, 0.21, 0.33, 0.64], title="Overlapping supercells")
+            labels = [f"{index + 1}. Requested twist {self.entries[index].requested_angle:g}°"
+                      for index in indices]
+            choices = RadioButtons(choice_ax, labels)
+            choices.on_clicked(lambda label: update(indices[labels.index(label)]))
+            widgets.append(choices)
+
+        save.on_clicked(save_selected)
+        figure.canvas.mpl_connect("close_event", lambda _event: widgets.clear())
+        update(selected)
+        figure.show()
+
 
 def main():
     parser = get_parser()
     args = parser.parse_args()
-    if args.angle is None and args.alist is None:
-        parser.error('specify at least one of -a/--angle or -al/--alist')
-    bottom = ase.io.read(args.bottom)
-    top = ase.io.read(args.top)
-
-    twistSupercell = HSGenerator(bottom, top, method=args.method, tolerance=args.tolerance,
-                                angle_tol=args.angle_tol, moire_tol=args.moire_tol,
-                                moire_order=args.moire_order, max_atoms=args.max_atoms, backend=args.backend)
-
-    if args.alist is None:
-        angles = args.angle
-    else:
-        angles = np.arange(args.alist[0], args.alist[1], args.alist[2])
+    if args.outformat and not args.write:
+        parser.error("--outformat requires --write")
+    try:
+        angles = args.angle if args.alist is None else angle_range(*args.alist)
+        entries, rows = run_scan(
+            args.bottom, args.top, angles, args.z, args.d,
+            method=args.method, tolerance=args.tolerance, angle_tol=args.angle_tol,
+            moire_tol=args.moire_tol, moire_order=args.moire_order, max_atoms=args.max_atoms,
+            backend=args.backend, max_order=args.max_order,
+        )
+    except INPUT_ERRORS as error:
+        parser.error(str(error))
 
     if args.max_order is not None:
-        if args.max_order < 1:
-            parser.error('--max-order must be at least 1')
-        for ang in angles:
-            print(f"Moiré components at {ang:g}° (period in Å, q in Å⁻¹; no Fourier amplitudes)")
-            print('order  n  m  q  period  angle (deg)  multiplicity')
-            for c in twistSupercell.moire_components(ang, args.max_order):
-                print(f'{c.order:.8g}  {c.n}  {c.m}  '
-                      f'({c.q[0]:.8g}, {c.q[1]:.8g})  {c.period:.8g}  '
-                      f'{c.angle_deg:.8g}  {c.multiplicity}')
-
-    entries = twistSupercell.scan(angles, args.z, args.d)
+        print("Geometric moiré components")
+        print("\t".join(MOIRE_HEADERS))
+        for row in rows:
+            print("\t".join(row))
+        if not rows:
+            print("No reciprocal-lattice vector pairs satisfy the analysis cutoff.")
     if not entries:
-        raise SystemExit('[err] No structure within the configured limits')
-    angles = np.array([angle for angle, _, _ in entries])
-    effective_angles = np.array([result.info["theta_eff"] for _, result, _ in entries])
-    nums = np.array([len(result) for _, result, _ in entries])
-    Deltas = np.array([strain for _, _, strain in entries]) * 100
-    results = [(result, strain) for _, result, strain in entries]
-    scatter = plt.scatter(effective_angles, nums, c=Deltas, picker=True)
-    plt.colorbar(scatter, label='Max strain (%)')
-    plt.xlabel(r'Effective Twist Angle ($^{\circ}$)')
-    plt.ylabel('Number of Atoms')
-    plt.title('Click one point to see the structure.')
+        raise SystemExit(NO_SUPERCELLS)
 
-    handler = StructureVisualizer(angles, bottom, top, args, results)
-
-    plt.gcf().canvas.mpl_connect('pick_event', handler.onpick)
-
+    StructureVisualizer(entries, args.write, args.outformat)
     plt.show()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

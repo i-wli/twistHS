@@ -99,10 +99,10 @@ def _aligned_bases(A_b, A_t):
 
 
 def moire_lattice(A_b, A_t):
-    """Return a first-order moiré row basis after nearest reciprocal pairing.
+    """Return a first-order moiré lattice basis after reciprocal-lattice pairing.
 
-    A_t already includes the desired rotation. A finite 2D difference and a
-    unimodular pairing are required; this is not a coincidence-cell search.
+    A_t includes the requested twist. A finite two-dimensional moiré lattice
+    and a unimodular pairing matrix are required.
     """
     bottom, top, _, _ = _aligned_bases(A_b, A_t)
     return np.linalg.inv(np.linalg.inv(bottom) - np.linalg.inv(top))
@@ -148,7 +148,9 @@ def principal_strains(C_layer, C):
 
 @dataclass(frozen=True)
 class MoireComponent:
-    """A representative ± pair; multiplicity counts pairs of equal order/period.
+    """A representative ± pair of geometric moiré wave vectors.
+
+    Multiplicity counts pairs with equal geometric order and period.
 
     n and m refer to the original input reciprocal bases, q is Cartesian, and
     angle_deg is atan2(q_y, q_x) in [0, 360). A zero q has no direction (NaN).
@@ -216,11 +218,11 @@ def _component_pairs(A_b, A_t, max_order):
 
 
 def moire_components(A_b, A_t, max_order):
-    """Analyze primitive nearest-pair components starting from both layers.
+    """Return geometric moiré components from both reciprocal lattices.
 
-    Each layer's cutoff is max_order times its shortest reciprocal length.
-    Harmonics and ± duplicates are removed. Equal-order, equal-period pairs
-    are grouped with their multiplicity; this does not predict intensity.
+    Each layer's cutoff is max_order times the length of its shortest nonzero
+    reciprocal-lattice vector. Harmonics are excluded and each ± pair is
+    counted once. Multiplicity groups pairs with equal geometric order and period.
     """
     components = _component_pairs(A_b, A_t, max_order)
     components.sort(key=lambda c: (round(c.order, 10), -c.period, c.angle_deg))

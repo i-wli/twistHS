@@ -1,19 +1,23 @@
-# Twisted Heterostructure Generation Toolkit
-A Python-based solution for generating twisted heterostructures through both a Command-Line Interface (CLI) and a Graphical User Interface (GUI). Whether you are a researcher, student, or hobbyist interested in the fascinating world of moiré patterns, this toolkit is designed to provide a flexible and user-friendly approach to exploring these patterns.
+# twistHS
 
-The default coincidence search enumerates bottom sublattices in Hermite normal
-form and matches their basis vectors to the rotated top lattice. For each
-requested angle, it returns the cell with the fewest atoms that satisfies all
-four limits. Ties are resolved by maximum strain, effective angle deviation, and
-the integer matrices. Strain (as a fraction) and angle deviation (in degrees)
-are rounded to nine decimal places for ranking.
+twistHS constructs commensurate moiré supercells from two van der Waals monolayers.
+Use the CLI, browser-based GUI, or Python API to scan twist angles and analyze
+the geometric moiré components of twisted homobilayers and heterobilayers.
 
-- `--tolerance` limits the maximum absolute principal strain across both
-  layers. The default is 1%.
-- `--angle-tol` limits the difference between requested and effective twist.
-  The default is 0.1°.
+The default coincidence-lattice search enumerates lower-layer sublattices in
+Hermite normal form and matches their basis vectors to the rotated upper-layer
+lattice. At each requested twist angle, it returns the supercell with the fewest
+atoms that satisfies the specified constraints. Ties are resolved by maximum
+absolute principal engineering strain, twist-angle deviation, and the integer
+transformation matrices. Ranking uses strain as a fraction and twist-angle
+deviation in degrees, both rounded to nine decimal places.
+
+- `--tolerance` limits the maximum absolute principal engineering strain
+  across both layers. The default is 1%.
+- `--angle-tol` limits the angular deviation between the requested and
+  effective twist angles. The default is 0.1°.
 - `--moire-tol` limits the relative change of first-order moiré wave-vector
-  combinations and any enabled higher-order wave vectors. It accepts
+  combinations and any enabled higher-index wave vectors. It accepts
   percentages from 0% up to 100%, exclusive, and defaults to 5%.
 - `--max-atoms` limits the total number of atoms. The default is 12,000.
 
@@ -27,43 +31,39 @@ basis vectors with their nearest vectors in the other layer. This gives two
 sets of first-order reference moiré wave vectors. For each set, deformation
 may change any linear combination of its wave vectors by at most the specified
 percentage of the combination's original length, up to numerical roundoff.
-This limits changes in both length and direction and keeps a two-dimensional
-reference from collapsing into stripes.
+This constrains changes in both magnitude and direction of the reference
+moiré wave vectors.
 
-`--moire-order K` sets the reciprocal length cutoff for search protection
-in units of each layer's shortest reciprocal length. The default `1.0` uses
-the first-order constraint alone. A finite value above 1 applies the same
-`--moire-tol` to the relative change of each finite-period higher-order wave
-vector within the cutoff. Scans omit angles with no cell that meets the limits
-within the atom budget.
+`--moire-order K` sets the reciprocal cutoff for the moiré constraint in
+units of each layer's shortest nonzero reciprocal-lattice vector. The default
+`1.0` applies the first-order constraint. A finite value above 1 applies the same
+`--moire-tol` to the relative change of each finite-period higher-index wave
+vector within the cutoff. The scan omits requested twist angles for which no
+supercell satisfies the specified constraints.
 
-`--method first-order` reproduces the v1 rounding approach for aligned
-primitive bases. It pairs the reduced bottom reciprocal vectors with their
-nearest top reciprocal vectors and requires a unimodular pairing. The
+`--method first-order` constructs supercells by rounding the first-order moiré
+cell in aligned primitive bases. It pairs the reduced lower-layer reciprocal
+vectors with their nearest upper-layer reciprocal vectors and requires the
+pairing matrix to be unimodular. The
 real-space moiré cell is `A_M = (A_b^-1 - A_t^-1)^-1` in the aligned bases.
-This mode applies only the strain filter when scanning angles. Singular
+This method uses the strain limit to filter the scan. Singular
 moiré geometry, invalid pairing, and singular rounded cells raise errors.
 [Hermann (2012)](https://doi.org/10.1088/0953-8984/24/31/314210)
 
-`-mo K` / `--max-order K` additionally prints higher-index reciprocal components
-for every requested angle. In each layer, the analysis pairs every nonzero
-vector within the cutoff with its nearest vector in the other layer. It combines
-both sets and keeps pairs whose two vectors are nonzero and within `K` times
-their respective layer's shortest reciprocal length. Harmonics and ± duplicates
-are removed. The table reports
-input-basis indices, Cartesian `q = G_b - G_t`, `2π/|q|`, direction, geometric
-order (1, √3, …), and multiplicity of equal-order, equal-period ± pairs. Zero `q`
-has infinite period and undefined direction (`nan`). This analysis follows the
-higher-index construction discussed by
-[Pham et al. (2022)](https://doi.org/10.1038/s41699-022-00321-9); it computes no
-Fourier amplitudes and generates no additional atomic structures. Multilayer
-and supermoiré analysis are not included.
+`-mo K` / `--max-order K` reports geometric moiré components at each requested
+twist angle independently of supercell construction. For each layer, the
+analysis pairs every nonzero reciprocal-lattice vector within the cutoff with
+its nearest vector in the other layer. It combines both sets and retains
+pairs with two nonzero vectors whose lengths are at most `K` times the
+shortest nonzero reciprocal-lattice vector of their respective layers. The
+analysis removes harmonics and counts each ± pair once.
 
-## Features
-
-- CLI Tool (`twist_cli.py`): generate structures through your terminal or command prompt.
-- GUI Tool (`twist_gui.py`): an user-friendly interface, allowing for interactive adjustments and real-time visualization.
-
+The table reports indices in the input reciprocal bases, the Cartesian wave
+vector `q = G_b - G_t`, the period `2π/|q|`, the azimuth, the geometric order
+(1, √3, …), and the multiplicity of ± pairs with the same order and period.
+Zero `q` has infinite period and undefined azimuth (`nan`). The analysis
+cutoff is independent of `--moire-order`, which controls the moiré constraint
+during coincidence-lattice search. [Pham et al. (2022)](https://doi.org/10.1038/s41699-022-00321-9)
 
 ## Installation
 
@@ -106,46 +106,51 @@ python -m twine upload dist/*
 
 ## Usage
 
-**Option 1. Using the CLI Tool (`twist_cli.py`)**
+### Command-line interface
 
-Open your command-line interface and run:
-```
-twist_cli [options]
-```
-For example, analyze reciprocal components through order 2 and visualize the
-structures that pass a 0.5% strain tolerance:
-```
+```sh
+twist_cli --help
 twist_cli -b tests/graphene.xsf -t tests/MoS2.xsf -al 0 10 1 -tol 0.5 -mo 2
 ```
-Use `--moire-order 4` to enable search protection through order 4 independently
-of the analysis table.
 
-This should open a matplotlib interface:
-![image](https://github.com/i-wli/twistHS/blob/main/docs/cli.gif)
+This example samples the interval [0°, 10°) in 1° increments, applies a
+0.5% strain limit, and reports geometric moiré components through reciprocal
+cutoff 2. Use `-a ANGLE [ANGLE ...]` for an explicit list of requested twist
+angles or `-al START STOP STEP` for a half-open interval. The step must point
+from the start toward the stop. Choose one mode per invocation.
 
+Select a point in the Matplotlib plot to inspect the atomic structure and
+export the supercell. If the point corresponds to multiple scan results,
+select the requested twist angle in the structure view.
 
-**Option 2. Using the GUI Tool (`twist_gui.py`)**
+### Graphical interface
 
-To launch the GUI, simply run:
-```
+```sh
 twist_gui
 ```
 
-Once the GUI is open, you should see:
-![image](https://github.com/i-wli/twistHS/blob/main/docs/gui.gif)
+Upload the lower- and upper-layer primitive cells in an ASE-readable format.
+Enter the start, stop, and step in degrees, then select **Scan twist angles**.
+Set the construction method, coincidence-lattice search parameters, and optional
+reciprocal cutoff for component analysis under **Construction and reciprocal-space
+analysis**. Select a result to preview the atomic structure, then select
+**Prepare supercell download**.
 
-The GUI uses the requested angle to select or save an individual structure.
-Use the moiré order cutoff field to enable higher-order protection.
-In the CLI, click a point to open its structure and save it with the default
-XSF filename or a path supplied through `-w`. Use `-o` to specify the format
-for that path.
+### Shared geometry and export
 
-Use `-d` in the CLI or the midplane separation field in the GUI to set the
-signed top-minus-bottom separation in Å before periodic wrapping. The default
-in the CLI is 7 Å. Each layer's midplane is halfway between its minimum and
-maximum z coordinates.
+The default out-of-plane supercell lattice parameter is 30 Å. The default
+interlayer distance is 7 Å, measured from the lower- to the upper-layer
+midplane. Each layer's midplane lies halfway between its lowest and highest
+atoms. Set these values with `-z` and
+`-d` in the CLI or with the corresponding fields in the GUI.
 
-**Python API**
+Both interfaces export to `structure_<requested angle>.xsf` by default, with
+the angle in degrees to two decimal places. Use `-w` for a custom CLI export
+path or **Download filename** in the GUI. ASE infers the format from the file
+extension. With a custom filename, use `-o` or **ASE output format** to
+specify an explicit format such as `lammps-data`.
+
+### Python API
 
 ```python
 from ase.io import read
@@ -159,9 +164,9 @@ for requested_angle, atoms, strain in generator.scan([4, 5, 6], super_z=30, delt
     print(requested_angle, atoms.info["theta_eff"], len(atoms), 100 * strain)
 ```
 
-`gen_supercell` returns strain as a fraction and raises `ValueError` if search
-finds no matching cell. Its `delta_z` argument and the one in `scan` set the
-signed midplane separation. The optional `tolerance` argument to `scan` overrides
+`gen_supercell` returns the maximum absolute principal engineering strain as
+a fraction and raises `ValueError` if the search finds no matching supercell. Its `delta_z` argument and the one in `scan` set the
+interlayer distance between layer midplanes. The optional `tolerance` argument to `scan` overrides
 the generator's strain limit in percent.
 
 ## Supercell construction benchmark

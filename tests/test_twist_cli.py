@@ -1,198 +1,118 @@
-import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
-import pytest
+import ase.io
 import matplotlib.pyplot as plt
+from matplotlib.widgets import RadioButtons
 import numpy as np
-import tempfile
-from unittest.mock import Mock, patch
-from ase import Atoms
-from twistHS.twist_cli import StructureVisualizer
+import pytest
 
-@pytest.fixture
-def mock_args():
-    """Create mock arguments"""
-    args = Mock()
-    args.write = None
-    args.outformat = None
-    args.z = 30.0
-    args.d = 7.0
-    return args
+from twistHS.lib.workflow import NO_SUPERCELLS, Supercell, angle_range
+from twistHS.twist_cli import StructureVisualizer, main
 
-@pytest.fixture
-def test_structures():
-    """Create test structures"""
-    a = 2.46 # graphene
-    bottom = Atoms('C2',
-                  positions=[[0, 0, 0],
-                           [a/2, a*np.sqrt(3)/2, 0]],
-                  cell=[[a, 0, 0],
-                        [-a/2, a*np.sqrt(3)/2, 0],
-                        [0, 0, 15]])
-    
-    a = 2.504 # hBN
-    top = Atoms(['B', 'N'],
-                positions=[[0, 0, 0],
-                         [a/2, a*np.sqrt(3)/2, 0]],
-                cell=[[a, 0, 0],
-                      [-a/2, a*np.sqrt(3)/2, 0],
-                      [0, 0, 15]])
-    return bottom, top
-
-@pytest.fixture
-def handler(test_structures, mock_args):
-    bottom, top = test_structures
-    angles = [0.0, 1.0, 2.0]
-    Delta = 0.01
-    results = [(bottom.copy(), Delta) for _ in range(3)]
-    for angle, (structure, _) in zip(angles, results):
-        structure.info["theta_eff"] = angle
-    return StructureVisualizer(angles, bottom, top, mock_args, results)
-
-def test_initialization(handler):
-    """Test StructureVisualizer initialization"""
-    assert handler.current_structure is None
-    assert handler.ang == 0
-    assert handler.num == 0
-    assert handler.Delta == 0
-    assert len(handler.angles) == 3
-    assert len(handler.results) == 3
-
-def test_get_filename_default(handler):
-    """Test default filename generation"""
-    handler.ang = 1.5
-    handler.num = 100
-    filename = handler.get_filename()
-    assert filename == "Super_1.50_100.xsf"
-
-def test_get_filename_custom(handler, mock_args):
-    """Test custom filename"""
-    mock_args.write = "custom.xsf"
-    filename = handler.get_filename()
-    assert filename == "custom.xsf"
-
-@patch('matplotlib.pyplot.show')
-def test_onpick_event_pathCol(mock_show, handler):
-    """Test onpick event handling with PathCollection"""
-    from matplotlib.collections import PathCollection
-
-    event = Mock()
-    event.artist = PathCollection([])
-    event.ind = [0]
-
-    handler.onpick(event)
-    assert handler.ang == handler.angles[0]
-    assert handler.Delta == handler.results[0][1]
-
-def test_onpick_event_wrong_artist(handler):
-    """Test onpick event handling with wrong artist type"""
-    event = Mock()
-    event.artist = Mock()
-    event.ind = [0]
-    
-    initial_ang = handler.ang
-    initial_delta = handler.Delta
-    
-    handler.onpick(event)
-    assert handler.ang == initial_ang
-    assert handler.Delta == initial_delta
-
-def test_save_structure(handler):
-    """Test structure saving"""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        handler.args.write = os.path.join(tmpdir, "test.xsf")
-        handler.current_result = handler.results[0][0]
-        
-        event = Mock()
-        handler.save_structure(event)
-        
-        assert os.path.exists(handler.args.write)
+DATA = Path(__file__).parent
+GRAPHENE = str(DATA / "graphene.xsf")
+MOS2 = str(DATA / "MoS2.xsf")
 
 
-def test_main_filters_angles_and_results(monkeypatch):
-    from twistHS.twist_cli import main
-    root = Path(__file__).parent
-    monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', str(root / 'graphene.xsf'),
-                        '-t', str(root / 'graphene.xsf'), '-a', '0.05', '21.84', '5', '-tol', '0.5',
-                        '--angle-tol', '0.1', '--moire-tol', '0.3', '--max-atoms', '28'])
-    with (patch('twistHS.twist_cli.StructureVisualizer') as visualizer,
-          patch('matplotlib.pyplot.show'), patch('matplotlib.pyplot.scatter', wraps=plt.scatter) as scatter):
-        main()
-    angles, _, _, _, results = visualizer.call_args.args
-    np.testing.assert_array_equal(angles, [21.84])
-    assert len(results) == 1
-    assert len(results[0][0]) == 28
-    assert results[0][1] * 100 <= 0.5
-    np.testing.assert_allclose(scatter.call_args.args[0], [21.7867893], rtol=0, atol=1e-7)
+@pytest.fixture(autouse=True)
+def close_figures():
+    yield
+    plt.close("all")
 
 
-def test_main_applies_moire_tolerance(monkeypatch):
-    from twistHS.twist_cli import main
-    graphene = str(Path(__file__).parent / 'graphene.xsf')
-    monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', graphene, '-t', graphene,
-                        '-a', '21.84', '--moire-tol', '0.2', '--max-atoms', '28'])
-    with pytest.raises(SystemExit, match='No structure within the configured limits'):
-        main()
+@pytest.mark.parametrize("start, stop, step, expected", [
+    ("21.84", "21.8402", "0.0001", [21.84, 21.8401]),
+    (0.3, 0, -0.1, [0.3, 0.2, 0.1]),
+    (0, 0.25, 0.1, [0, 0.1, 0.2]),
+])
+def test_half_open_angle_range(start, stop, step, expected):
+    assert angle_range(start, stop, step) == expected
 
 
-def test_main_applies_moire_order_independently_of_analysis_cutoff(monkeypatch):
-    from twistHS.twist_cli import main
-    root = Path(__file__).parent
-    monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', str(root / 'graphene.xsf'),
-                        '-t', str(root / 'MoS2.xsf'), '-a', '0', '--max-atoms', '1000', '--max-order', '1'])
-    with patch('twistHS.twist_cli.StructureVisualizer') as visualizer, patch('matplotlib.pyplot.show'):
-        main()
-    _, _, _, _, results = visualizer.call_args.args
-    assert [len(result) for result, _ in results] == [755]
-
-    monkeypatch.setattr(sys, 'argv', sys.argv + ['--moire-order', '4.0'])
-    with pytest.raises(SystemExit, match='No structure within the configured limits'):
-        main()
+@pytest.mark.parametrize("interval", [(0, 1, 0), (0, 1, -1), (1, 1, 1), (0, 1, "bad")])
+def test_invalid_angle_range(interval):
+    with pytest.raises(ValueError, match="interval"):
+        angle_range(*interval)
 
 
-def test_main_no_structure_within_tolerance(monkeypatch):
-    from twistHS.twist_cli import main
-    root = Path(__file__).parent
-    monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', str(root / 'graphene.xsf'),
-                        '-t', str(root / 'MoS2.xsf'), '-a', '0', '-tol', '0', '--max-atoms', '5'])
-    with pytest.raises(SystemExit, match='No structure within the configured limits'):
-        main()
-
-
-def test_main_requires_angles(monkeypatch, capsys):
-    from twistHS.twist_cli import main
-
-    monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', 'bottom.xsf', '-t', 'top.xsf'])
+@pytest.mark.parametrize("options, message", [
+    ([], "one of the arguments"),
+    (["-a", "1", "-al", "0", "2", "1"], "not allowed with argument"),
+    (["-al", "0", "1"], "expected 3 arguments"),
+    (["-a", "1", "-o", "xyz"], "--outformat requires --write"),
+])
+def test_invalid_cli_arguments(monkeypatch, capsys, options, message):
+    monkeypatch.setattr(sys, "argv", ["twist_cli", "-b", GRAPHENE, "-t", GRAPHENE, *options])
     with pytest.raises(SystemExit) as error:
         main()
     assert error.value.code == 2
-    assert 'specify at least one of -a/--angle or -al/--alist' in capsys.readouterr().err
+    assert message in capsys.readouterr().err
 
 
-def test_main_component_table_and_commensurate_cells(monkeypatch, capsys):
-    from twistHS.twist_cli import main
-    root = Path(__file__).parent
-    monkeypatch.setattr(sys, 'argv', ['twist_cli', '-b', str(root / 'graphene.xsf'),
-                        '-t', str(root / 'graphene.xsf'), '-a', '21.7868', '38.2132', '-mo', '2'])
-    with patch('twistHS.twist_cli.StructureVisualizer') as visualizer, patch('matplotlib.pyplot.show'):
-        main()
-    angles, _, _, _, results = visualizer.call_args.args
-    np.testing.assert_array_equal(angles, [21.7868, 38.2132])
-    assert [len(result) for result, _ in results] == [28, 28]
+def run_cli(monkeypatch, *options, upper=GRAPHENE):
+    monkeypatch.setattr(sys, "argv", ["twist_cli", "-b", GRAPHENE, "-t", upper, *options])
+    with patch("twistHS.twist_cli.StructureVisualizer", wraps=StructureVisualizer) as visualizer:
+        with patch("matplotlib.pyplot.show"):
+            main()
+    return visualizer.call_args.args[0]
+
+
+def test_scan_filters_angles_and_keeps_result_metrics_aligned(monkeypatch):
+    entries = run_cli(monkeypatch, "-a", "0.05", "21.84", "5", "-tol", "0.5",
+                      "--moire-tol", "0.3", "--max-atoms", "28")
+    assert [entry.requested_angle for entry in entries] == [21.84]
+    assert len(entries[0].atoms) == 28
+    assert entries[0].strain * 100 <= 0.5
+    np.testing.assert_allclose(entries[0].effective_angle, 21.7867893, rtol=0, atol=1e-7)
+
+
+def test_component_table_and_requested_angle_order(monkeypatch, capsys):
+    entries = run_cli(monkeypatch, "-a", "38.2132", "21.7868", "-mo", "2")
+    assert [entry.requested_angle for entry in entries] == [38.2132, 21.7868]
+    assert [len(entry.atoms) for entry in entries] == [28, 28]
     table = capsys.readouterr().out
-    assert table.count('Moiré components at') == 2
-    assert 'multiplicity' in table
-    assert 'q  period  angle (deg)' in table
+    assert "Moiré wave vector (Å⁻¹)" in table
+    assert "Multiplicity" in table
+    assert table.index("38.2132\t") < table.index("21.7868\t")
 
 
-def test_save_respects_explicit_format(handler, tmp_path):
-    destination = tmp_path / 'structure.data'
-    handler.args.write = str(destination)
-    handler.args.outformat = 'xyz'
-    handler.current_result = handler.results[0][0]
-    handler.save_structure(None)
-    assert destination.read_text().splitlines()[0] == '2'
+def test_high_index_search_constraint_is_independent_of_analysis_cutoff(monkeypatch, capsys):
+    options = ("-a", "0", "--max-atoms", "1000", "--max-order", "1")
+    entries = run_cli(monkeypatch, *options, upper=MOS2)
+    assert [len(entry.atoms) for entry in entries] == [755]
+    old_analysis = capsys.readouterr().out
+    with pytest.raises(SystemExit, match=NO_SUPERCELLS):
+        run_cli(monkeypatch, *options, "--moire-order", "4", upper=MOS2)
+    assert capsys.readouterr().out == old_analysis
 
-if __name__ == '__main__':
-    pytest.main(['-v'])
+
+def test_picking_overlapping_points_exports_the_selected_supercell(monkeypatch, tmp_path):
+    first = ase.io.read(GRAPHENE)
+    second = first.copy()
+    second.positions[0, 2] += 0.5
+    for atoms in (first, second):
+        atoms.info["theta_eff"] = 21.7868
+    entries = [Supercell(21.84, first, 0.002), Supercell(21.8401, second, 0.002)]
+    monkeypatch.chdir(tmp_path)
+    handler = StructureVisualizer(entries, None, None)
+    np.testing.assert_allclose(handler.scatter.get_offsets(), [[21.7868, 2], [21.7868, 2]])
+    selectors = []
+
+    def capture_choices(*args):
+        choices = RadioButtons(*args)
+        selectors.append(choices)
+        return choices
+
+    with (patch("twistHS.twist_cli.Button") as button,
+          patch("twistHS.twist_cli.RadioButtons", side_effect=capture_choices),
+          patch("matplotlib.figure.Figure.show")):
+        handler.onpick(SimpleNamespace(artist=object(), ind=[0]))
+        button.assert_not_called()
+        handler.onpick(SimpleNamespace(artist=handler.scatter, ind=[0, 1]))
+    selectors[0].set_active(1)
+    button.return_value.on_clicked.call_args.args[0](None)
+    saved = ase.io.read(tmp_path / "structure_21.84.xsf")
+    np.testing.assert_allclose(saved.positions, second.positions)

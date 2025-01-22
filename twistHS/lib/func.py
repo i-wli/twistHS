@@ -12,24 +12,24 @@ class Pyatoms:
     atomic_numbers: np.ndarray
 
     def __post_init__(self):
-        """Validate the data structure."""
+        """Validate the cell matrix and per-atom arrays."""
         if self.vectors.shape != (3, 3):
-            raise ValueError("[err] Cell vectors must be 3x3 array")
+            raise ValueError("The cell matrix must have three lattice vectors with three Cartesian components each.")
         if self.positions.shape[1] != 3:
-            raise ValueError("[err] Positions must be Nx3 array")
+            raise ValueError("The position array must have three Cartesian coordinates per atom.")
         if len(self.atomic_numbers) != len(self.positions):
-            raise ValueError("[err] Number of atoms mismatch")
+            raise ValueError("The number of atomic numbers must equal the number of positions.")
 
 def calc_vector_norm(vector: np.ndarray) -> float:
-    """Calculate the norm of a vector"""
+    """Return the Euclidean norm of a vector."""
     return np.linalg.norm(vector)
 
 def float_eq(f1: float, f2: float, prec: float = DEFAULT_PRECISION) -> bool:
-    """Float equal"""
+    """Compare two scalars with the specified absolute tolerance and NumPy's default relative tolerance."""
     return np.isclose(f1, f2, atol=prec)
 
 def ase_atoms_to_py_atoms(atoms: Atoms) -> Pyatoms:
-    """Convert ASE Atoms object to Pyatoms."""
+    """Copy the cell, Cartesian coordinates, and atomic numbers from ASE."""
     try:
         return Pyatoms(
             vectors=atoms.cell.copy(),
@@ -40,7 +40,7 @@ def ase_atoms_to_py_atoms(atoms: Atoms) -> Pyatoms:
         raise ValueError(f"Invalid ASE Atoms object: {str(e)}")
 
 def py_atoms_to_ase_atoms(atoms: Pyatoms) -> Atoms:
-    """Convert Pyatoms to ASE Atoms"""
+    """Construct an ASE Atoms object with periodic boundary conditions."""
     return Atoms(
         numbers=atoms.atomic_numbers,
         positions=atoms.positions,
@@ -52,22 +52,22 @@ def check_vectors(atoms: Atoms):
     cell = atoms.cell
     if not (np.all(np.abs(cell[:2, 2]) <= DEFAULT_PRECISION) and
             np.all(np.abs(cell[2, :2]) <= DEFAULT_PRECISION)):
-        raise ValueError('[err] Input structures: a and b must lie in the xy plane and c along z')
+        raise ValueError('The primitive-cell vectors a and b must lie in the xy plane, and c must lie along z.')
 
 def coord_cart2frac(cell_vecs: np.ndarray, cart_coords: np.ndarray) -> np.ndarray:
-    """Transfrom the cart coords to frac coords"""
+    """Convert Cartesian coordinates to fractional coordinates."""
     cell_vecs_inv = np.linalg.inv(cell_vecs)
     frac_vec = cart_coords @ cell_vecs_inv
     return frac_vec
 
 def coord_frac2cart(cell_vecs: np.ndarray, frac_coords: np.ndarray) -> np.ndarray:
-    """Transfrom the frac coords to cart coords"""
+    """Convert fractional coordinates to Cartesian coordinates."""
     return frac_coords @ cell_vecs
 
 def get_supercell_vecs(trans_2D: np.ndarray, unit_vecs: np.ndarray, super_z: float) -> np.ndarray:
-    """Get the supercell lattice"""
+    """Return the supercell lattice vectors with out-of-plane parameter super_z."""
     if super_z <= 0:
-        raise ValueError("[err] Supercell z-dimension must be positive")
+        raise ValueError("The out-of-plane supercell lattice parameter must be positive.")
     
     super_2d = trans_2D @ unit_vecs[0:2,0:2]
     supercell_vecs = np.array([[super_2d[0,0], super_2d[0,1], 0],
@@ -92,7 +92,7 @@ def lattice_points_in_supercell(supercell_matrix: np.ndarray) -> np.ndarray:
     # Ensuring the number of points matches the expected value from the determinant
     expected_points = round(abs(np.linalg.det(supercell_matrix)))
     if len(tvects) != expected_points:
-        raise ValueError(f"Found {len(tvects)} points, expected {expected_points}")
+        raise ValueError(f"Supercell contains {len(tvects)} lattice points. Expected {expected_points} from its determinant.")
 
     return tvects
 

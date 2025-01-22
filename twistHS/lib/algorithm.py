@@ -25,12 +25,21 @@ from twistHS.lib.func import (
 )
 from twistHS.lib.moire import deformation, moire_components, supercell_matrices
 
-class HSGenerator:
-    """Generate twisted vdW heterostructure supercells.
+DEFAULT_SUPER_Z = 30.0
+DEFAULT_DELTA_Z = 7.0
+CONSTRUCTION_METHODS = ("search", "first-order")
+DESCRIPTION = "Construct commensurate moiré supercells for twisted van der Waals bilayers."
 
-    For coincidence search, moire_tol limits any linear combination within
-    each first-order reference set. With moire_order > 1 it also limits each
-    finite-period higher-order wave vector within the reciprocal cutoff.
+class HSGenerator:
+    """Construct commensurate moiré supercells from two monolayer primitive cells.
+
+    Coincidence-lattice search minimizes the supercell atom count subject to
+    strain, twist-angle deviation, and moiré wave-vector constraints.
+    The strain limit constrains the maximum absolute principal engineering
+    strain across both layers, expressed as a percentage. The moiré tolerance
+    limits the relative change of any linear combination in either first-order reference
+    set. A moiré cutoff above 1 also constrains individual finite-period
+    higher-index wave vectors within that cutoff.
     """
     
     def __init__(self, bottom: Atoms, top: Atoms, *, method="search",
@@ -41,7 +50,7 @@ class HSGenerator:
         self.top = top
         self.logger = logging.getLogger(__name__)
         self._validate_inputs()
-        if method not in ("search", "first-order"):
+        if method not in CONSTRUCTION_METHODS:
             raise ValueError("method must be 'search' or 'first-order'")
         validate_tolerance(tolerance)
         validate_search_limits(angle_tol, max_atoms, moire_tol=moire_tol, moire_order=moire_order)
@@ -57,9 +66,9 @@ class HSGenerator:
     def _validate_inputs(self) -> None:
         """Validate input atomic structures."""
         if not isinstance(self.bottom, Atoms) or not isinstance(self.top, Atoms):
-            raise ValueError("[err] Bottom and top must be ASE Atoms objects")
+            raise ValueError("The lower- and upper-layer structures must be ASE Atoms objects.")
         if not len(self.bottom) or not len(self.top):
-            raise ValueError("[err] Both primitive cells must contain atoms")
+            raise ValueError("Both monolayer primitive cells must contain atoms.")
         check_vectors(self.bottom)
         check_vectors(self.top)
 
@@ -73,20 +82,24 @@ class HSGenerator:
         return Pyatoms(vectors_super, superatoms_pos, superatoms.numbers)
 
     def gen_supercell(self, theta: float, super_z: float, delta_z: float) -> tuple[Atoms, float, float]:
-        """Return (structure, maximum absolute principal strain, effective angle in degrees).
+        """Return the supercell, maximum absolute principal engineering strain as
+        a fraction, and effective twist angle in degrees.
 
-        delta_z is the signed top-minus-bottom midplane separation in Å before wrapping.
+        theta is the requested twist angle in degrees. super_z is the
+        out-of-plane lattice parameter in Å. delta_z is the interlayer
+        distance in Å: the z coordinate of the upper-layer midplane minus that
+        of the lower-layer midplane, before periodic wrapping.
         """
         result = self._generate(theta, super_z, delta_z, self.tolerance)
         if result is None:
-            raise ValueError(f"No coincidence cell at {theta:g}° within the search limits")
+            raise ValueError(f"No commensurate supercell at a requested twist angle of {theta:g}° satisfies the specified constraints.")
         return result
 
     def _generate(self, theta, super_z, delta_z, tolerance):
         if not np.isfinite(theta) or not np.isfinite(delta_z):
-            raise ValueError("theta and delta_z must be finite")
+            raise ValueError("The requested twist angle (theta) and interlayer distance (delta_z) must be finite.")
         if not np.isfinite(super_z) or super_z <= 0:
-            raise ValueError("super_z must be finite and positive")
+            raise ValueError("The out-of-plane lattice parameter (super_z) must be finite and positive.")
         top_rot = self.top.copy()
         top_rot.rotate(theta, 'z', rotate_cell=True)
         bottom, top = self.bottom.cell[:2, :2], top_rot.cell[:2, :2]
@@ -128,10 +141,13 @@ class HSGenerator:
         return results, strain, theta_eff
 
     def scan(self, angles, super_z, delta_z, tolerance=None):
-        """Return (requested angle, structure, strain) entries for matched angles.
+        """Return (requested twist angle, supercell, strain) for each accepted angle.
 
-        Each structure carries its effective angle as info["theta_eff"].
-        delta_z is the signed top-minus-bottom midplane separation in Å before wrapping.
+        Angles are in degrees and strain is the maximum absolute principal
+        engineering strain as a fraction. Each supercell stores the effective
+        twist angle in info["theta_eff"]. super_z and delta_z have the same
+        meanings as in gen_supercell. An explicit tolerance overrides the
+        configured strain limit in percent.
         """
         tolerance = self.tolerance if tolerance is None else tolerance
         validate_tolerance(tolerance)
@@ -146,35 +162,55 @@ class HSGenerator:
         return results
 
     def moire_components(self, theta, max_order):
-        """Analyze reciprocal components without constructing an atomic cell."""
+        """Return geometric moiré components at the requested twist in degrees.
+
+        max_order scales each layer's shortest nonzero reciprocal-lattice
+        vector to define the reciprocal cutoff.
+        """
         top_rot = self.top.copy()
         top_rot.rotate(theta, 'z', rotate_cell=True)
         return moire_components(self.bottom.cell[:2, :2], top_rot.cell[:2, :2], max_order)
 
 
 def get_parser():
-    parser = argparse.ArgumentParser(description="Generate twisted van der Waals heterostructures.")
-    parser.add_argument('-b','--bottom', required=True, help='Path to lower layer, need to be recognized by ASE')
-    parser.add_argument('-t','--top', required=True, help='Path to upper layer, need to be recognized by ASE')
-    parser.add_argument('-a','--angle', help='Multi twist angle',nargs='+', type=float)
-    parser.add_argument('-al','--alist', help='start end step',nargs='+', type=float)
-    parser.add_argument('-tol','--tolerance', help='max principal strain of either layer (%%), default = 1%%', type=float, default=DEFAULT_TOLERANCE)
-    parser.add_argument('--method', choices=('search', 'first-order'), default='search')
-    parser.add_argument('--backend', choices=SEARCH_BACKENDS, default='numpy',
-                        help='coincidence search backend (default: %(default)s)')
-    parser.add_argument('--angle-tol', type=float, default=DEFAULT_ANGLE_TOL,
-                        help='maximum effective angle deviation in degrees for search (default: %(default)s)')
-    parser.add_argument('--moire-tol', type=float, default=DEFAULT_MOIRE_TOL,
-                        help='maximum relative change of first-order combinations and enabled higher-order '
-                             'moiré wave vectors (%%, default: %(default)s)')
-    parser.add_argument('--moire-order', type=float, default=DEFAULT_MOIRE_ORDER,
-                        help='reciprocal cutoff for higher-order moiré protection in search (default: %(default)s)')
-    parser.add_argument('--max-atoms', type=int, default=DEFAULT_MAX_ATOMS,
-                        help='maximum total atom count for search (default: %(default)s)')
-    parser.add_argument('-mo', '--max-order', type=int, help='reciprocal length cutoff for higher-order analysis (integer >= 1)')
-    parser.add_argument('-z', help='superlattice constant along z direction, default = 30 A', type=float, default = 30.0)
-    parser.add_argument('-d', help='signed top-minus-bottom midplane separation before wrapping (Å, default: %(default)s)',
-                        type=float, default=7.0)
-    parser.add_argument('-w','--write', help='Path to write supercell, need to be recognized by ASE')
-    parser.add_argument('-o','--outformat', help='output file-format, like lammps-data', default = None)
+    parser = argparse.ArgumentParser(description=DESCRIPTION)
+    parser.add_argument("-b", "--bottom", required=True, metavar="PATH",
+                        help="Lower-layer primitive cell in an ASE-readable file")
+    parser.add_argument("-t", "--top", required=True, metavar="PATH",
+                        help="Upper-layer primitive cell in an ASE-readable file")
+    angles = parser.add_mutually_exclusive_group(required=True)
+    angles.add_argument("-a", "--angle", nargs="+", type=float, metavar="ANGLE",
+                        help="Requested twist angles (degrees), in scan order")
+    angles.add_argument("-al", "--alist", nargs=3, metavar=("START", "STOP", "STEP"),
+                        help="Requested twist-angle interval (degrees), including START and excluding STOP")
+    parser.add_argument("-tol", "--tolerance", type=float, default=DEFAULT_TOLERANCE,
+                        help="Maximum strain: largest absolute principal engineering strain in either layer "
+                             "(%%, default: %(default)s)")
+    parser.add_argument("--method", choices=CONSTRUCTION_METHODS, default="search",
+                        help="Supercell construction method (default: %(default)s)")
+    parser.add_argument("--backend", choices=SEARCH_BACKENDS, default="numpy",
+                        help="Coincidence-lattice search backend (default: %(default)s)")
+    parser.add_argument("--angle-tol", type=float, default=DEFAULT_ANGLE_TOL,
+                        help="Maximum deviation between requested and effective twist angles in coincidence-lattice "
+                             "search (degrees, default: %(default)s)")
+    parser.add_argument("--moire-tol", type=float, default=DEFAULT_MOIRE_TOL,
+                        help="Maximum relative change of first-order moiré wave-vector combinations and enabled "
+                             "higher-index wave vectors (%%, default: %(default)s)")
+    parser.add_argument("--moire-order", type=float, default=DEFAULT_MOIRE_ORDER,
+                        help="Reciprocal cutoff for the moiré constraint, in multiples of the length of each layer's shortest "
+                             "nonzero reciprocal-lattice vector. Use 1 for the first-order constraint (default: %(default)s)")
+    parser.add_argument("--max-atoms", type=int, default=DEFAULT_MAX_ATOMS,
+                        help="Maximum number of atoms per supercell in coincidence-lattice search (default: %(default)s)")
+    parser.add_argument("-mo", "--max-order", type=int, metavar="ORDER",
+                        help="Reciprocal cutoff for geometric moiré component analysis, in multiples of the length of each "
+                             "layer's shortest nonzero reciprocal-lattice vector (positive integer)")
+    parser.add_argument("-z", type=float, default=DEFAULT_SUPER_Z,
+                        help="Out-of-plane supercell lattice parameter (Å, default: %(default)s)")
+    parser.add_argument("-d", type=float, default=DEFAULT_DELTA_Z,
+                        help="Interlayer distance from the lower- to the upper-layer midplane "
+                             "(Å, default: %(default)s)")
+    parser.add_argument("-w", "--write", metavar="PATH",
+                        help="Supercell export path (default: structure_<requested angle to two decimal places>.xsf)")
+    parser.add_argument("-o", "--outformat", metavar="FORMAT",
+                        help="Explicit ASE output format, e.g. lammps-data (requires --write)")
     return parser
