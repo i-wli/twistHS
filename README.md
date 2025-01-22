@@ -169,6 +169,11 @@ a fraction and raises `ValueError` if the search finds no matching supercell. It
 interlayer distance between layer midplanes. The optional `tolerance` argument to `scan` overrides
 the generator's strain limit in percent.
 
+## JAX benchmark
+
+On an NVIDIA A100, JAX sped up full supercell generation by 2.02–2.33× over
+single-core NumPy after warm-up in the [two benchmark cases](docs/benchmark-search.md).
+
 ## Supercell construction benchmark
 
 On an Apple M1 with 8 GB of RAM, vectorized atom placement cut the median
