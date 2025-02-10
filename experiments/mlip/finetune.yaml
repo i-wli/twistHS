@@ -1,0 +1,36 @@
+# Naive fine-tuning: https://mace-docs.readthedocs.io/en/latest/guide/finetuning.html
+name: MoS2_SW_KC
+work_dir: results/mlip/finetune
+foundation_model: medium
+multiheads_finetuning: false
+train_file: results/mlip/train_512.extxyz
+valid_file: results/mlip/valid.extxyz
+test_file: results/mlip/test.extxyz
+energy_key: REF_energy
+forces_key: REF_forces
+stress_key: REF_stress
+E0s: '{42: 0.0, 16: 0.0}'
+compute_stress: true
+loss: stress
+energy_weight: 10.0
+forces_weight: 10.0
+# Stress weight uses the installed CLI default; the naive example specifies E/F only.
+stress_weight: 1.0
+config_type_weights: '{"Default": 1.0, "registry": 10.0}'
+swa: true
+start_swa: 150
+swa_energy_weight: 1000
+swa_forces_weight: 100
+lr: 0.001
+weight_decay: 0.0
+scaling: rms_forces_scaling
+batch_size: 2
+max_num_epochs: 200
+patience: 20
+ema: true
+ema_decay: 0.999
+amsgrad: true
+clip_grad: 1.0
+default_dtype: float64
+device: cuda
+seed: 3
