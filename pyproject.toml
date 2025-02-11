@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "twistHS"
-version = "1.4.0"
-description = "Construction and geometric analysis of commensurate moiré supercells for twisted van der Waals bilayers"
+version = "1.5.0"
+description = "Moiré supercell construction and analysis for twisted van der Waals bilayers, with MLIP relaxation and fine-tuning"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {file = "LICENSE"}
