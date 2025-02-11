@@ -1,3 +1,3 @@
 include tests/*.xsf
 include benchmarks/bench_build.py
-include docs/benchmarks.md docs/benchmark-build.csv docs/benchmark-build.png
+include docs/benchmark-build.md docs/benchmark-build.csv docs/benchmark-build.png
