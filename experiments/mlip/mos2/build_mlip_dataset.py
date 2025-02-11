@@ -1,4 +1,4 @@
-"""Build the frozen small-cell MoS2 sampling recipe before labeling."""
+"""Generate the small-cell MoS2 datasets for LAMMPS labeling."""
 
 import argparse
 import json

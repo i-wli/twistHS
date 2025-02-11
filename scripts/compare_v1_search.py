@@ -1,4 +1,7 @@
-"""Compare private twistHS v1 TMDC starting cells (first-order) with coincidence search."""
+"""Compare published twistHS v1 first-order TMDC cells with coincidence search.
+
+The cells are in commensurate_model on Zenodo (DOI 10.5281/zenodo.10979042).
+"""
 
 import argparse
 import csv

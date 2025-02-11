@@ -33,7 +33,8 @@ def sample_aligned_bilayers(layer, n_configs, seed, stacking, d_range, super_z,
                             supercell=3, sigma_atom=0.5, strain=0.0):
     """Sample R/H homobilayers with uniform translation and separation.
 
-    d_range is the (min, max) midplane separation in Å. strain is the half-width
+    d_range is the (min, max) separation of the layer midplanes in Å, which
+    for 1H MX₂ is the metal-plane separation. strain is the half-width
     of each uniformly sampled in-plane principal strain. sigma_atom is in Å·u^½.
     Each frame contains the bottom layer followed by the top.
     """

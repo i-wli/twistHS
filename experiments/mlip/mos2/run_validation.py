@@ -1,4 +1,4 @@
-"""Run the frozen v2 training and comparison workflow in a two-GPU Slurm job."""
+"""Fine-tune and validate MACE for MoS2 in a two-GPU Slurm job."""
 
 import csv
 import json
@@ -12,6 +12,7 @@ REFERENCE = Path("results/mlip/lammps")
 LABELS = ("R_5.09", "R_3.89", "R_3.15", "R_2.45", "R_2.00")
 DECISION_LABELS = LABELS[2:]
 SEEDS = (1, 2)
+ENERGY_GATE = 0.03
 SRUN = ("srun", "--exclusive", "--exact", "--nodes=1", "--ntasks=1",
         "--cpus-per-task=8", "--gres=gpu:1", "--cpu-bind=cores")
 
@@ -39,13 +40,14 @@ def train_and_diagnose(out, budget, seed):
     directory.mkdir()
     finetune = directory / "finetune"
     run_gpu([
-        "-m", "mace.cli.run_train", "--config", "experiments/mlip/finetune.yaml",
+        "-m", "mace.cli.run_train", "--config", "experiments/mlip/mos2/finetune.yaml",
         "--name", name, "--seed", seed, "--train_file", f"results/mlip/train_{budget}.extxyz",
         "--work_dir", finetune, "--model_dir", finetune,
     ], directory / "train.log")
     model = finetune / f"{name}_stagetwo.model"
     run_gpu([
-        "scripts/small_cell_diagnostics.py", "--monolayer", REFERENCE / "monolayer/final.extxyz",
+        "experiments/mlip/mos2/small_cell_diagnostics.py",
+        "--monolayer", REFERENCE / "monolayer/final.extxyz",
         "--reference", REFERENCE / "small_cells.json", "--model", model,
         "--device", "cuda", "--steps", 5000, "--out", directory,
     ], directory / "diagnostics.log")
@@ -58,7 +60,7 @@ def train_and_diagnose(out, budget, seed):
     diagnostic = {
         "energy_RhX": energy,
         "relative_energy_error": relative_error,
-        "pass": relative_error <= 0.03,
+        "pass": relative_error <= ENERGY_GATE,
         "separations": {label: table[f"d_{label}"] for label in ("Rhh", "RhX", "RhM")},
     }
     return model, table["a"]["model"], diagnostic
@@ -72,7 +74,7 @@ def compare(model, a_model, a_lammps):
         destination = directory / label
         destination.mkdir()
         exit_code = run_gpu([
-            "scripts/compare_mlip_lammps.py", "--start", cell / "lammps.lmp",
+            "experiments/mlip/mos2/compare_mlip_lammps.py", "--start", cell / "lammps.lmp",
             "--lammps-final", cell / "min.lmp", "--label", label, "--model", model,
             "--device", "cuda", "--steps", 15000, "--fmax", 1e-4,
             "--a-model", a_model, "--a-lammps", a_lammps,

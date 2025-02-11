@@ -5,7 +5,13 @@ from ase.optimize import FIRE
 
 
 class InPlaneIsotropicCellFilter(FrechetCellFilter):
-    """Allow equal in-plane scaling with a fixed out-of-plane cell."""
+    """Allow equal in-plane scaling with a fixed out-of-plane cell.
+
+    The xx and yy cell forces are replaced by their mean. ASE's
+    hydrostatic_strain=True is not equivalent: ASE 3.24.0 averages xx, yy
+    and zz before applying the mask, which mixes out-of-plane stress into
+    the in-plane cell forces.
+    """
 
     def __init__(self, atoms):
         super().__init__(atoms, mask=[1, 1, 0, 0, 0, 0])

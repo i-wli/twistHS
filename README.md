@@ -79,6 +79,8 @@ python -m pip install .
 
 Install `".[gui]"` to add the Gradio interface.
 
+Install `".[mlip]"` to add MACE relaxation and fine-tuning dependencies.
+
 Install `".[jax]"` to enable the optional JAX search backend. Select it with
 `--backend jax` on the CLI, `backend="jax"` in `HSGenerator`, or `jax` in
 the GUI's search backend menu. Both backends use double precision.
@@ -173,6 +175,16 @@ the generator's strain limit in percent.
 
 On an NVIDIA A100, JAX sped up full supercell generation by 2.02–2.33× over
 single-core NumPy after warm-up in the [two benchmark cases](docs/benchmark-jax.md).
+
+## MLIP relaxation and fine-tuning
+
+Use MACE-MP-0 medium plus D3(BJ) for zero-shot relaxation, analyze local
+stacking and interlayer distances, or sample small aligned bilayers for
+fine-tuning with your own reference labels. The [MLIP user guide](docs/mlip.md)
+includes CPU examples, checkpoint loading and label formats. The
+[MoS₂ case study](experiments/mlip/mos2/README.md) tests the small-cell sampling
+recipe with classical LAMMPS labels before DFT labeling and covers LAMMPS
+SW/mod+KC reference calculations, dataset generation and held-out evaluation.
 
 ## Supercell construction benchmark
 
