@@ -194,5 +194,3 @@ from 614.75 s to 0.1545 s. Median peak process memory fell
 from 499.0 MiB to 377.6 MiB.
 The [benchmark report](docs/benchmark-build.md) covers the 5° to 0.1° sweep and
 provides the raw measurements and reproduction commands.
-
-![Build time and peak process memory by atom count](docs/benchmark-build.png)

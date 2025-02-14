@@ -91,51 +91,64 @@ def build_interface(download_directory):
     with gr.Blocks(title="twistHS · Commensurate moiré supercells") as interface:
         gr.Markdown(f"# twistHS\n{DESCRIPTION}")
         with gr.Row():
-            bottom = gr.File(label="Lower-layer primitive cell", type="filepath")
-            top = gr.File(label="Upper-layer primitive cell", type="filepath")
-        with gr.Row():
-            start = gr.Number(label="Start twist angle (°)")
-            stop = gr.Number(label="Stop twist angle (°)", info="The stop angle is excluded.")
-            step = gr.Number(label="Twist-angle step (°)")
-        with gr.Row():
-            z = gr.Number(DEFAULT_SUPER_Z, label="Out-of-plane supercell lattice parameter (Å)")
-            d = gr.Number(DEFAULT_DELTA_Z, label="Interlayer distance (Å)",
-                          info="From the lower- to the upper-layer midplane.")
-            tolerance = gr.Number(DEFAULT_TOLERANCE, label=STRAIN_LABEL,
-                                  info="Largest absolute principal strain in either layer.")
-        with gr.Accordion("Construction and reciprocal-space analysis", open=False):
-            method = gr.Dropdown(CONSTRUCTION_METHODS, value="search", label="Supercell construction method",
-                                 info="Coincidence-lattice search or first-order moiré-cell rounding.")
-            backend = gr.Dropdown(SEARCH_BACKENDS, value="numpy", label="Coincidence-lattice search backend")
-            angle_tol = gr.Number(DEFAULT_ANGLE_TOL, label="Maximum twist-angle deviation (°)",
-                                  info="Deviation between requested and effective twist angles in coincidence-lattice search.")
-            max_atoms = gr.Number(DEFAULT_MAX_ATOMS, label="Maximum number of atoms per supercell",
-                                  info="Applies to coincidence-lattice search.")
-            moire_tol = gr.Number(DEFAULT_MOIRE_TOL, label="Maximum relative change in moiré wave vectors (%)",
-                                  info="Applies to first-order combinations and enabled higher-index wave vectors.")
-            moire_order = gr.Number(DEFAULT_MOIRE_ORDER, label="Reciprocal cutoff for the moiré constraint",
-                                    info="In multiples of the length of each layer’s shortest nonzero reciprocal-lattice vector. "
-                                         "Use 1 for the first-order constraint.")
-            max_order = gr.Textbox(label="Reciprocal cutoff for geometric moiré component analysis",
-                                   placeholder="Leave blank to omit analysis",
-                                   info="Positive integer in multiples of the length of each layer’s shortest "
-                                        "nonzero reciprocal-lattice vector.")
-        submit = gr.Button("Scan twist angles", variant="primary")
-        status = gr.Textbox(label="Scan status", interactive=False)
-        scatter = gr.Plot(label="Commensurate supercells by effective twist angle")
-        analysis = gr.Dataframe(headers=list(MOIRE_HEADERS), datatype="str", label="Geometric moiré components",
-                                interactive=False, visible=False)
-        selection = gr.Dropdown(choices=[], type="index", label="Commensurate supercell", interactive=True)
-        structure = gr.Plot(label="Atomic structure")
-        with gr.Row():
-            filename = gr.Textbox(label="Download filename", placeholder="structure_<requested angle>.xsf")
-            outformat = gr.Textbox(label="ASE output format", info="Optional. An explicit format requires a filename.")
-        download = gr.Button("Prepare supercell download")
-        export_status = gr.Textbox(label="Export status", interactive=False)
-        file = gr.File(label="Supercell download", interactive=False)
+            with gr.Column(scale=1, min_width=340):
+                with gr.Row():
+                    bottom = gr.File(label="Lower-layer primitive cell", type="filepath")
+                    top = gr.File(label="Upper-layer primitive cell", type="filepath")
+                with gr.Row():
+                    start = gr.Number(label="Start twist angle (°)")
+                    stop = gr.Number(label="Stop twist angle (°)", info="The stop angle is excluded.")
+                    step = gr.Number(label="Twist-angle step (°)")
+                with gr.Row():
+                    d = gr.Number(DEFAULT_DELTA_Z, label="Interlayer distance (Å)",
+                                  info="From the lower- to the upper-layer midplane.")
+                    z = gr.Number(DEFAULT_SUPER_Z, label="Out-of-plane supercell lattice parameter (Å)")
+                tolerance = gr.Number(DEFAULT_TOLERANCE, label=STRAIN_LABEL,
+                                      info="Largest absolute principal strain in either layer.")
+                with gr.Accordion("Construction and reciprocal-space analysis", open=False):
+                    method = gr.Dropdown(CONSTRUCTION_METHODS, value="search", label="Supercell construction method",
+                                         info="Coincidence-lattice search or first-order moiré-cell rounding.")
+                    backend = gr.Dropdown(SEARCH_BACKENDS, value="numpy", label="Coincidence-lattice search backend")
+                    angle_tol = gr.Number(DEFAULT_ANGLE_TOL, label="Maximum twist-angle deviation (°)",
+                                          info="Deviation between requested and effective twist angles in "
+                                               "coincidence-lattice search.")
+                    max_atoms = gr.Number(DEFAULT_MAX_ATOMS, label="Maximum number of atoms per supercell",
+                                          info="Applies to coincidence-lattice search.")
+                    moire_tol = gr.Number(DEFAULT_MOIRE_TOL, label="Maximum relative change in moiré wave vectors (%)",
+                                          info="Applies to first-order combinations and enabled higher-index wave vectors.")
+                    moire_order = gr.Number(DEFAULT_MOIRE_ORDER, label="Reciprocal cutoff for the moiré constraint",
+                                            info="In multiples of the length of each layer’s shortest nonzero "
+                                                 "reciprocal-lattice vector. Use 1 for the first-order constraint.")
+                    max_order = gr.Textbox(label="Reciprocal cutoff for geometric moiré component analysis",
+                                           placeholder="Leave blank to omit analysis",
+                                           info="Positive integer in multiples of the length of each layer’s shortest "
+                                                "nonzero reciprocal-lattice vector.")
+                submit = gr.Button("Scan twist angles", variant="primary")
+                status = gr.Textbox(label="Scan status", interactive=False)
+            with gr.Column(scale=2, min_width=440):
+                with gr.Tabs() as results:
+                    with gr.Tab("Scan results", id="scan"):
+                        scatter = gr.Plot(label="Commensurate supercells by effective twist angle")
+                        analysis = gr.Dataframe(headers=list(MOIRE_HEADERS), datatype="str",
+                                                label="Geometric moiré components", interactive=False, visible=False)
+                    with gr.Tab("Supercell"):
+                        selection = gr.Dropdown(choices=[], type="index", label="Commensurate supercell",
+                                                interactive=True)
+                        with gr.Row():
+                            with gr.Column(scale=5, min_width=380):
+                                structure = gr.Plot(label="Atomic structure")
+                            with gr.Column(scale=2, min_width=220):
+                                with gr.Row():
+                                    filename = gr.Textbox(label="Download filename",
+                                                          placeholder="structure_<requested angle>.xsf")
+                                    outformat = gr.Textbox(label="ASE output format",
+                                                           info="Optional. An explicit format requires a filename.")
+                                download = gr.Button("Prepare supercell download")
+                                export_status = gr.Textbox(label="Export status", interactive=False)
+                                file = gr.File(label="Supercell download", interactive=False)
         entries = gr.State([])
 
-        submit.click(
+        submit.click(lambda: gr.Tabs(selected="scan"), None, results).then(
             scan,
             [bottom, top, start, stop, step, z, d, tolerance, method, angle_tol, moire_tol, moire_order,
              max_atoms, backend, max_order],
